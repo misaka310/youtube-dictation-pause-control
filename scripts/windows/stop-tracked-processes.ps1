@@ -1,11 +1,9 @@
-param(
-    [Parameter(Mandatory = $true)]
-    [string]$RootDir
-)
-
 $ErrorActionPreference = 'Stop'
 
-$runtimeDir = Join-Path $RootDir 'runtime'
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$rootDir = (Resolve-Path -LiteralPath (Join-Path $scriptDir '..\..')).Path
+$runtimeDir = Join-Path $rootDir 'runtime'
+
 $pidFiles = @(
     @{ Name = 'Node server'; Path = Join-Path $runtimeDir 'youtube-dictation-server.pid'; ExpectedNames = @('node', 'node.exe') },
     @{ Name = 'AutoHotkey script'; Path = Join-Path $runtimeDir 'youtube-dictation-ahk.pid'; ExpectedNames = @('AutoHotkey64', 'AutoHotkey64.exe', 'AutoHotkey32', 'AutoHotkey32.exe', 'AutoHotkey', 'AutoHotkey.exe') }

@@ -13,7 +13,7 @@ echo.
 echo  Stopping only processes started by this tool.
 echo.
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%\scripts\windows\stop-tracked-processes.ps1" -RootDir "%ROOT_DIR%"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%\scripts\windows\stop-tracked-processes.ps1"
 
 if %errorlevel% equ 0 (
     echo.
