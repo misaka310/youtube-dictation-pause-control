@@ -29,6 +29,10 @@ global lastWisprFlowTick := 0
 global DEBOUNCE_MS := 400
 
 ; --- PID管理 ---
+GetCurrentProcessId() {
+    return DllCall("GetCurrentProcessId", "UInt")
+}
+
 WritePidFile() {
     global RUNTIME_DIR, AHK_PID_FILE
     try {
@@ -38,7 +42,7 @@ WritePidFile() {
         if (FileExist(AHK_PID_FILE)) {
             FileDelete(AHK_PID_FILE)
         }
-        FileAppend(A_ScriptPID . "`n", AHK_PID_FILE, "UTF-8")
+        FileAppend(GetCurrentProcessId() . "`n", AHK_PID_FILE, "UTF-8")
     } catch {
         ; PID書き込みエラー時は無視
     }
@@ -49,7 +53,7 @@ DeletePidFile(exitReason, exitCode) {
     try {
         if (FileExist(AHK_PID_FILE)) {
             pid := Trim(FileRead(AHK_PID_FILE, "UTF-8"))
-            if (pid = A_ScriptPID) {
+            if (pid = GetCurrentProcessId()) {
                 FileDelete(AHK_PID_FILE)
             }
         }
