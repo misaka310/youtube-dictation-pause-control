@@ -50,19 +50,22 @@ if not exist "logs" (
     mkdir "logs"
 )
 
-:: 4. Check if Server is already running on port 17654 using case-insensitive check
+:: 4. Start or migrate the local HTTP Bridge Server into Windows Terminal
 echo [SERVER] Checking if local HTTP server is already running...
-netstat -ano | findstr /i "17654" >nul 2>nul
+curl.exe -s --max-time 1 http://127.0.0.1:17654/health | findstr "youtube-dictation-pause" >nul 2>nul
 if %errorlevel% equ 0 (
-    echo [SERVER] Local HTTP Bridge Server is already running. Skipping startup.
+    echo [SERVER] Existing YouTube Dictation server detected.
+    echo [SERVER] Stopping existing server so it can be reopened in Windows Terminal...
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\windows\stop-tracked-processes.ps1"
+    ping 127.0.0.1 -n 2 > nul
+)
+
+echo [SERVER] Starting Local HTTP Bridge Server...
+where wt.exe >nul 2>nul
+if %errorlevel% equ 0 (
+    wt.exe -w 0 new-tab --title "YouTube Dictation Server" cmd /k "server\start-server.bat"
 ) else (
-    echo [SERVER] Starting Local HTTP Bridge Server...
-    where wt.exe >nul 2>nul
-    if %errorlevel% equ 0 (
-        wt.exe -w 0 new-tab --title "YouTube Dictation Server" cmd /k "server\start-server.bat"
-    ) else (
-        start "YouTube Dictation Server" cmd.exe /k "server\start-server.bat"
-    )
+    start "YouTube Dictation Server" cmd.exe /k "server\start-server.bat"
 )
 echo.
 
