@@ -57,7 +57,12 @@ if %errorlevel% equ 0 (
     echo [SERVER] Local HTTP Bridge Server is already running. Skipping startup.
 ) else (
     echo [SERVER] Starting Local HTTP Bridge Server...
-    start "YouTube Dictation Server" /min cmd.exe /c "server\start-server.bat"
+    where wt.exe >nul 2>nul
+    if %errorlevel% equ 0 (
+        wt.exe -w 0 new-tab --title "YouTube Dictation Server" cmd /k "server\start-server.bat"
+    ) else (
+        start "YouTube Dictation Server" cmd.exe /k "server\start-server.bat"
+    )
 )
 echo.
 
