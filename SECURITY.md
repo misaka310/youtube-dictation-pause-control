@@ -8,6 +8,8 @@ This project is a local Windows utility. It does not use accounts, API keys, OAu
 - The default port is `17654`. If you change it, update `config/settings.json`, `extension/background.js`, and `extension/manifest.json` together.
 - Do not expose this port through firewall rules, reverse proxies, tunnels, or public network bindings.
 - Runtime logs are written under `logs/` and `*.log` files are ignored by Git.
+- Runtime PID files are written under `runtime/` and ignored by Git.
+- User-specific `config/settings.json` is ignored by Git; publish `config/settings.example.json` only.
 
 ## Browser permissions
 

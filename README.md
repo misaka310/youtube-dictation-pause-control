@@ -15,16 +15,14 @@ Windowsで音声入力中だけYouTubeを自動一時停止するローカル補
 ```text
 youtube-dictation-pause/
 ├── ahk/                 AutoHotkey v2: ホットキー検知と状態送信
-├── config/              ポート、ホットキー、デバッグ設定
+├── config/              設定例。settings.json はローカル専用でGit管理外
 ├── extension/           Brave / Chromium 拡張機能 Manifest V3
 ├── server/              127.0.0.1 専用のNode.js HTTP Bridge
 ├── docs/                手動E2E確認、旧方式の検討メモ
 ├── logs/                実行時ログ。*.log はGit管理外
+├── scripts/windows/     自動起動などの補助スクリプト
 ├── start.bat            手動起動
-├── start-background.bat 自動起動向けの静音起動
-├── setup-autostart.bat  Windowsログイン時の自動起動登録
-├── remove-autostart.bat 自動起動解除
-└── stop.bat             関連プロセス停止
+└── stop.bat             このツールが起動したプロセスだけ停止
 ```
 
 通信経路は次の通りです。
@@ -79,13 +77,13 @@ Typeless / Wispr Flow hotkey
 登録:
 
 ```cmd
-setup-autostart.bat
+scripts\windows\setup-autostart.bat
 ```
 
 解除:
 
 ```cmd
-remove-autostart.bat
+scripts\windows\remove-autostart.bat
 ```
 
 停止:
@@ -95,10 +93,17 @@ stop.bat
 ```
 
 自動起動はユーザーのスタートアップフォルダを使います。管理者権限は不要です。
+`stop.bat` は `runtime/*.pid` を使い、このツールが起動した Node.js サーバーと AutoHotkey スクリプトだけを停止します。
 
 ## 設定
 
-`config/settings.json` を編集します。初期値は `config/settings.example.json` と同じです。
+初回だけ `config/settings.example.json` をコピーして `config/settings.json` を作ります。`settings.json` はローカル専用でGit管理外です。
+
+```cmd
+copy config\settings.example.json config\settings.json
+```
+
+その後、`config/settings.json` を編集します。初期値は `config/settings.example.json` と同じです。
 
 ```json
 {
@@ -136,6 +141,7 @@ npm test
 - ローカルHTTPサーバーは `127.0.0.1` のみにバインドします。
 - APIキー、OAuthトークン、認証情報は使いません。
 - 実行時ログは `logs/control.log` に出ますが、`.gitignore` によりGit管理外です。
+- 実行時PIDは `runtime/` に出ますが、`.gitignore` によりGit管理外です。
 - ローカルポートを外部ネットワークへ公開しないでください。
 - CORSは拡張機能Origin向けに制限しています。
 

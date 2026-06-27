@@ -1,8 +1,0 @@
-{
-  "port": 17654,
-  "pollingIntervalMs": 500,
-  "typelessHotkey": "Ctrl+Shift",
-  "wisprFlowHotkey": "Ctrl+]",
-  "autoStartServer": true,
-  "debugMode": false
-}

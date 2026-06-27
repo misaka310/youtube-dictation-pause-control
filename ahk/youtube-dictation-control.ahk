@@ -14,6 +14,9 @@ global WISPR_FLOW_HOTKEY_RAW := "Ctrl+]"
 global AUTO_START_SERVER := true
 global POLLING_INTERVAL_MS := 500
 
+global RUNTIME_DIR := A_ScriptDir . "\..\runtime"
+global AHK_PID_FILE := RUNTIME_DIR . "\youtube-dictation-ahk.pid"
+
 ; デバッグモード (true の場合、状態変更時に画面上にポップアップ通知（ToolTip）を表示します)
 global DEBUG_MODE := false
 
@@ -24,6 +27,36 @@ global anyDictationActive := false
 global lastTypelessTick := 0
 global lastWisprFlowTick := 0
 global DEBOUNCE_MS := 400
+
+; --- PID管理 ---
+WritePidFile() {
+    global RUNTIME_DIR, AHK_PID_FILE
+    try {
+        if (!DirExist(RUNTIME_DIR)) {
+            DirCreate(RUNTIME_DIR)
+        }
+        if (FileExist(AHK_PID_FILE)) {
+            FileDelete(AHK_PID_FILE)
+        }
+        FileAppend(A_ScriptPID . "`n", AHK_PID_FILE, "UTF-8")
+    } catch {
+        ; PID書き込みエラー時は無視
+    }
+}
+
+DeletePidFile(exitReason, exitCode) {
+    global AHK_PID_FILE
+    try {
+        if (FileExist(AHK_PID_FILE)) {
+            pid := Trim(FileRead(AHK_PID_FILE, "UTF-8"))
+            if (pid = A_ScriptPID) {
+                FileDelete(AHK_PID_FILE)
+            }
+        }
+    } catch {
+        ; PID削除エラー時は無視
+    }
+}
 
 ; --- ログ出力用関数 ---
 LogMessage(message) {
@@ -254,6 +287,8 @@ HandleWisprFlowKey(*) {
 }
 
 ; --- スクリプト初期設定・開始 ---
+WritePidFile()
+OnExit(DeletePidFile)
 LogMessage("AHK script started.")
 
 ; 1. 設定読み込み

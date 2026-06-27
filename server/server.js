@@ -6,6 +6,8 @@ const SERVICE_NAME = 'youtube-dictation-pause';
 const VERSION = '1.2.0';
 const DEFAULT_PORT = 17654;
 const DEFAULT_SETTINGS_PATH = path.join(__dirname, '..', 'config', 'settings.json');
+const RUNTIME_DIR = path.join(__dirname, '..', 'runtime');
+const PID_FILE_PATH = path.join(RUNTIME_DIR, 'youtube-dictation-server.pid');
 
 let port = DEFAULT_PORT;
 
@@ -45,6 +47,43 @@ function logMessage(message) {
   } catch (err) {
     console.error('Failed to write to log file:', err);
   }
+}
+
+function writePidFile() {
+  try {
+    if (!fs.existsSync(RUNTIME_DIR)) {
+      fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+    }
+    fs.writeFileSync(PID_FILE_PATH, `${process.pid}\n`, 'utf8');
+  } catch (err) {
+    console.error('Failed to write PID file:', err);
+  }
+}
+
+function removePidFile() {
+  try {
+    if (fs.existsSync(PID_FILE_PATH)) {
+      const rawPid = fs.readFileSync(PID_FILE_PATH, 'utf8').trim();
+      if (rawPid === String(process.pid)) {
+        fs.unlinkSync(PID_FILE_PATH);
+      }
+    }
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+function shutdown(signal) {
+  logMessage(`shutdown requested: ${signal}`);
+  server.close(() => {
+    removePidFile();
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    removePidFile();
+    process.exit(0);
+  }, 1500).unref();
 }
 
 function isAllowedBrowserOrigin(origin) {
@@ -159,6 +198,11 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ error: 'Not Found' }));
 });
 
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('exit', removePidFile);
+
 server.listen(port, '127.0.0.1', () => {
+  writePidFile();
   logMessage(`server started on http://127.0.0.1:${port}`);
 });

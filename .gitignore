@@ -19,7 +19,11 @@ yarn-error.log*
 coverage/
 dist/
 
-# Runtime logs
+# Local user config
+config/settings.json
+
+# Runtime state and logs
+runtime/
 *.log
 logs/*.log
 logs/*.tmp

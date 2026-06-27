@@ -1,5 +1,7 @@
 @echo off
-cd /d "%~dp0"
+set "ROOT_DIR=%~dp0..\.."
+for %%I in ("%ROOT_DIR%") do set "ROOT_DIR=%%~fI"
+cd /d "%ROOT_DIR%"
 
 :: 1. AutoHotkey v2 executable path discovery
 set "AHK_EXE="

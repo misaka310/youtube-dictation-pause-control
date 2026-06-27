@@ -1,4 +1,8 @@
 @echo off
+set "ROOT_DIR=%~dp0"
+for %%I in ("%ROOT_DIR%") do set "ROOT_DIR=%%~fI"
+cd /d "%ROOT_DIR%"
+
 title YouTube Dictation Pause Control - Stop Services
 cls
 
@@ -6,15 +10,22 @@ echo ==========================================================
 echo  YouTube Dictation Pause Control - Stop Services
 echo ==========================================================
 echo.
-echo  Stopping all active AHK scripts and local HTTP Bridge Servers...
+echo  Stopping only processes started by this tool.
 echo.
 
-:: Stop AHK processes and Node Server on port 17654 (both local and remote socket connections)
-powershell -Command "echo 'Stopping AutoHotkey instances...'; Stop-Process -Name 'AutoHotkey*' -Force -ErrorAction SilentlyContinue; echo 'Stopping Node.js server on port 17654...'; Get-NetTCPConnection | Where-Object { $_.LocalPort -eq 17654 -or $_.RemotePort -eq 17654 } | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%\scripts\windows\stop-tracked-processes.ps1" -RootDir "%ROOT_DIR%"
 
-echo.
-echo ==========================================================
-echo  [SUCCESS] All services stopped successfully!
-echo ==========================================================
+if %errorlevel% equ 0 (
+    echo.
+    echo ==========================================================
+    echo  [SUCCESS] Stop command completed.
+    echo ==========================================================
+) else (
+    echo.
+    echo ==========================================================
+    echo  [ERROR] Stop command failed.
+    echo ==========================================================
+)
+
 echo.
 pause
