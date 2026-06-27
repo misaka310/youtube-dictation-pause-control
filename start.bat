@@ -63,8 +63,10 @@ if %errorlevel% equ 0 (
 echo [SERVER] Starting Local HTTP Bridge Server...
 where wt.exe >nul 2>nul
 if %errorlevel% equ 0 (
-    wt.exe -w 0 new-tab --title "YouTube Dictation Server" cmd /k "server\start-server.bat"
+    echo [SERVER] Starting in Windows Terminal tab...
+    call "scripts\windows\start-server-terminal-tab.cmd"
 ) else (
+    echo [SERVER] Windows Terminal not found. Starting in a separate cmd window...
     start "YouTube Dictation Server" cmd.exe /k "server\start-server.bat"
 )
 echo.
