@@ -1,0 +1,32 @@
+# Security Policy
+
+This project is a local Windows utility. It does not use accounts, API keys, OAuth tokens, or external services.
+
+## Local-only design
+
+- The Node.js HTTP bridge binds to `127.0.0.1` only.
+- The default port is `17654`. If you change it, update `config/settings.json`, `extension/background.js`, and `extension/manifest.json` together.
+- Do not expose this port through firewall rules, reverse proxies, tunnels, or public network bindings.
+- Runtime logs are written under `logs/` and `*.log` files are ignored by Git.
+
+## Browser permissions
+
+The extension requests access to:
+
+- `http://127.0.0.1:17654/*`
+- YouTube pages under `youtube.com`
+
+It does not request access to arbitrary websites.
+
+## CORS behavior
+
+The local server accepts browser CORS requests only from extension origins such as `chrome-extension://...` and `moz-extension://...`. Requests without an `Origin` header are allowed for local tools such as AutoHotkey and curl.
+
+## Reporting issues
+
+If you find a security issue, open a private report or contact the maintainer before publishing exploit details. Include:
+
+- OS and browser version
+- reproduction steps
+- expected impact
+- whether the local port was exposed outside the machine

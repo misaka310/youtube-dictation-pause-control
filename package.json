@@ -1,0 +1,14 @@
+{
+  "name": "youtube-dictation-pause-control",
+  "version": "1.2.0",
+  "description": "Pause and resume YouTube playback while dictating with Typeless or Wispr Flow on Windows.",
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node tests/smoke-api.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
