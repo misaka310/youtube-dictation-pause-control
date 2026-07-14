@@ -162,3 +162,21 @@ Native Messaging を使う案は、レジストリ・絶対パス・Service Work
 ## License
 
 MIT License. See `LICENSE`.
+
+## Verification and CI
+
+Run the full local regression suite with:
+
+```cmd
+npm test
+```
+
+The suite validates JavaScript and JSON syntax, the local HTTP API, and content-script state transitions with fake videos, documents, and Chrome APIs. Each part can also run independently:
+
+```cmd
+npm run check
+npm run test:api
+npm run test:extension
+```
+
+GitHub Actions runs the same suite on `windows-latest` for every push and pull request. For browser-facing behavior and manual verification, see [docs/state-behavior.md](docs/state-behavior.md) and [docs/e2e-checklist.md](docs/e2e-checklist.md).
