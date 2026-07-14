@@ -1,56 +1,72 @@
 // YouTube Dictation Pause Control - Background Service Worker
 
-console.log('[BG] background service worker loaded');
+const DEFAULT_SERVER_URL = 'http://127.0.0.1:17654';
 
-const SERVER_URL = 'http://127.0.0.1:17654';
+function createStateResponder(deps = {}) {
+  const fetchFn = deps.fetch || fetch;
+  const AbortControllerCtor = deps.AbortController || AbortController;
+  const logger = deps.console || console;
+  const serverUrl = deps.serverUrl || DEFAULT_SERVER_URL;
+  const timeoutMs = deps.timeoutMs || 800;
 
-// content.js からのメッセージを受け取る
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message && message.type === 'GET_STATE') {
-    console.log('[BG] GET_STATE received');
+  return async function getState() {
+    const controller = new AbortControllerCtor();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    // 非同期処理を安全に実行するための自己実行関数
-    (async () => {
-      console.log('[BG] fetching state from localhost');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-      }, 800);
+    try {
+      const response = await fetchFn(`${serverUrl}/state`, { signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      logger.log(`[BG] fetched state active=${data.active}, sessionId=${data.sessionId}`);
+      return { success: true, data };
+    } catch (error) {
+      const errorMessage = error && error.name === 'AbortError' ? `Fetch timeout (${timeoutMs}ms)` : error.message;
+      logger.error('[BG] fetch failed', errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+}
 
-      try {
-        const response = await fetch(`${SERVER_URL}/state`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        
-        console.log(`[BG] localhost fetch status=${response.status}`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log(`[BG] fetched state active=${data.active}, sessionId=${data.sessionId}`);
-
-        try {
-          sendResponse({ success: true, data: data });
-          console.log('[BG] sendResponse success');
-        } catch (sendErr) {
-          console.error('[BG] sendResponse error', sendErr.message);
-        }
-      } catch (err) {
-        clearTimeout(timeoutId);
-        const errMsg = err.name === 'AbortError' ? 'Fetch timeout (800ms)' : err.message;
-        console.error('[BG] fetch failed', errMsg);
-
-        try {
-          sendResponse({ success: false, error: errMsg });
-          console.log('[BG] sendResponse success (error payload)');
-        } catch (sendErr) {
-          console.error('[BG] sendResponse error', sendErr.message);
-        }
-      }
-    })();
-
-    // 非同期レスポンスを保証するために true を返します
-    return true;
+function createMessageListener({ getState, console: logger = console } = {}) {
+  function safeSendResponse(sendResponse, payload) {
+    try {
+      sendResponse(payload);
+      return true;
+    } catch (error) {
+      const errorMessage = error && error.message ? error.message : String(error);
+      logger.error('[BG] sendResponse failed', errorMessage);
+      return false;
+    }
   }
-});
 
+  return function onMessage(message, _sender, sendResponse) {
+    if (!message || message.type !== 'GET_STATE') return undefined;
+
+    Promise.resolve()
+      .then(() => getState())
+      .then(
+        response => {
+          safeSendResponse(sendResponse, response);
+        },
+        error => {
+          const errorMessage = error && error.message ? error.message : String(error);
+          logger.error('[BG] state request failed', errorMessage);
+          safeSendResponse(sendResponse, { success: false, error: errorMessage });
+        }
+      );
+    return true;
+  };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { createStateResponder, createMessageListener };
+}
+
+if (typeof chrome !== 'undefined' && chrome.runtime) {
+  console.log('[BG] background service worker loaded');
+  const getState = createStateResponder();
+
+  chrome.runtime.onMessage.addListener(createMessageListener({ getState, console }));
+}

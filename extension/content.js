@@ -1,244 +1,218 @@
 // YouTube Dictation Pause Control - Content Script
 
-if (window.__youtubeDictationPauseLoaded) {
-  console.log('[EXT] duplicate content script detected; skipping');
-} else {
-  window.__youtubeDictationPauseLoaded = true;
-  console.log('[EXT] content script loaded');
+function createPauseController(deps) {
+  const browserWindow = deps.window;
+  const browserDocument = deps.document;
+  const runtime = deps.chrome.runtime;
+  const logger = deps.console || console;
+  const setTimer = deps.setInterval || setInterval;
+  const clearTimer = deps.clearInterval || clearInterval;
+  const setRequestTimer = deps.setTimeout || setTimeout;
+  const clearRequestTimer = deps.clearTimeout || clearTimeout;
+  const requestTimeoutMs = deps.requestTimeoutMs || 1000;
+  const pollingIntervalMs = deps.pollingIntervalMs || 500;
 
-  // 内部状態管理変数
   let lastStateActive = false;
   let pausedSessionId = null;
   let isPausedByMe = false;
-  let pollingIntervalMs = 500; // ポーリング間隔 500ms
-  let isRequesting = false; // 多重リクエスト防止用フラグ
-  
-  // 制御強化用の追加変数
   let targetVideo = null;
   let blockCounter = 0;
+  let isRequesting = false;
+  let activeSessionId = null;
+  let resumeInFlight = false;
 
-  // play イベント監視リスナー
+  function isPlaying(video) {
+    return !!video && !video.paused && !video.ended && video.readyState >= 2;
+  }
+
   function onPlayBlocked(event) {
     const video = event.target;
     if (lastStateActive && isPausedByMe && pausedSessionId !== null) {
       video.pause();
-      blockCounter++;
-      console.log(`[EXT] play event blocked while active sessionId=${pausedSessionId} (count=${blockCounter})`);
+      blockCounter += 1;
+      logger.log(`[EXT] play event blocked while active sessionId=${pausedSessionId} (count=${blockCounter})`);
     }
   }
 
-  // video要素のアタッチ・デタッチ制御関数
   function updateVideoAttachment() {
-    const currentVideo = document.querySelector('video');
-    if (currentVideo !== targetVideo) {
-      if (targetVideo) {
-        try {
-          targetVideo.removeEventListener('play', onPlayBlocked);
-        } catch (e) {
-          // ignore
-        }
-      }
+    const currentVideo = browserDocument.querySelector('video');
+    if (currentVideo === targetVideo) return;
 
-      if (lastStateActive) {
-        console.log('[EXT] video element changed while active');
-      } else {
-        console.log('[EXT] video element changed');
-      }
+    if (targetVideo) targetVideo.removeEventListener('play', onPlayBlocked);
+    targetVideo = currentVideo;
+    logger.log(lastStateActive ? '[EXT] video element changed while active' : '[EXT] video element changed');
 
-      targetVideo = currentVideo;
-
-      if (targetVideo) {
-        targetVideo.addEventListener('play', onPlayBlocked);
-        
-        // もし現在アクティブで、自分が停止させた状態なら、新しいビデオも即座に停止
-        if (lastStateActive && isPausedByMe && pausedSessionId !== null) {
-          const isPlaying = !targetVideo.paused && !targetVideo.ended && targetVideo.readyState >= 2;
-          if (isPlaying) {
-            targetVideo.pause();
-            console.log(`[EXT] immediate pause applied to new video element sessionId=${pausedSessionId}`);
-          }
-        }
+    if (targetVideo) {
+      targetVideo.addEventListener('play', onPlayBlocked);
+      if (lastStateActive && isPausedByMe && pausedSessionId !== null && isPlaying(targetVideo)) {
+        targetVideo.pause();
+        logger.log(`[EXT] immediate pause applied to new video element sessionId=${pausedSessionId}`);
       }
     }
   }
 
-  // バックグラウンドへのリクエストをタイムアウト付き Promise でラップする関数
-  function requestStateWithTimeout(timeoutMs = 1000) {
+  function requestStateWithTimeout() {
     return new Promise((resolve, reject) => {
-      let resolved = false;
-
-      // タイムアウトタイマーのセット
-      const timer = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
+      let settled = false;
+      const timeout = setRequestTimer(() => {
+        if (!settled) {
+          settled = true;
           reject(new Error('background request timeout'));
         }
-      }, timeoutMs);
+      }, requestTimeoutMs);
 
       try {
-        chrome.runtime.sendMessage({ type: 'GET_STATE' }, (response) => {
-          clearTimeout(timer);
-          if (resolved) return; // すでにタイムアウト済みの場合は終了
-          resolved = true;
-
-          if (chrome.runtime.lastError) {
-            reject(new Error(`chrome.runtime.lastError=${chrome.runtime.lastError.message}`));
+        runtime.sendMessage({ type: 'GET_STATE' }, response => {
+          clearRequestTimer(timeout);
+          if (settled) return;
+          settled = true;
+          if (runtime.lastError) {
+            reject(new Error(`chrome.runtime.lastError=${runtime.lastError.message}`));
             return;
           }
-
           resolve(response);
         });
-      } catch (err) {
-        clearTimeout(timer);
-        if (!resolved) {
-          resolved = true;
-          reject(err);
+      } catch (error) {
+        clearRequestTimer(timeout);
+        if (!settled) {
+          settled = true;
+          reject(error);
         }
       }
     });
   }
 
-  // バックグラウンド経由で状態を取得するポーリング処理
-  function pollState() {
-    // 500ms 周期で video 要素の変更をチェックし、アタッチを常に最新に保つ
-    updateVideoAttachment();
-
-    if (isRequesting) {
+  function handleStartPause(video, sessionId) {
+    activeSessionId = sessionId;
+    if (!video) {
+      logger.log('[EXT] video not found');
       return;
     }
-    isRequesting = true;
 
-    console.log('[EXT] requesting state via background');
-
-    requestStateWithTimeout(1000)
-      .then(response => {
-        isRequesting = false;
-        
-        const rawString = response === undefined ? 'undefined' : JSON.stringify(response);
-        console.log(`[EXT] background response raw=${rawString}`);
-
-        if (response && response.success) {
-          const state = response.data;
-          const currentActive = !!state.active;
-          const sessionId = parseInt(state.sessionId, 10);
-
-          console.log(`[EXT] received state active=${currentActive}, sessionId=${sessionId}`);
-
-          // A. 状態遷移: false -> true (録音開始)
-          if (currentActive && !lastStateActive) {
-            console.log('[EXT] transition inactive -> active');
-            blockCounter = 0; // ブロックカウンターを初期化
-            handleStartPause(targetVideo, sessionId);
-          }
-          // B. 状態遷移: true -> false (録音終了)
-          else if (!currentActive && lastStateActive) {
-            console.log('[EXT] transition active -> inactive');
-            handleEndResume(targetVideo, sessionId);
-          }
-          // C. 状態継続: active が true のまま維持されている場合 (YouTubeの自動再生復帰対策)
-          else if (currentActive && lastStateActive) {
-            applyPauseGuard(targetVideo, sessionId);
-          }
-
-          lastStateActive = currentActive;
-        } else {
-          const errDetail = response ? response.error : 'No response data';
-          console.error('[EXT] background state request failed', errDetail);
-          // 通信失敗時は lastStateActive を戻さない
-        }
-      })
-      .catch(err => {
-        isRequesting = false;
-        const errMsg = err.message;
-        if (errMsg === 'background request timeout') {
-          console.error('[EXT] background request timeout');
-        } else if (errMsg.startsWith('chrome.runtime.lastError=')) {
-          console.error(`[EXT] ${errMsg}`);
-        } else {
-          console.error(`[EXT] ${errMsg}`);
-        }
-        // エラー時も lastStateActive を戻さない
-      });
-  }
-
-  // 録音開始時の一時停止処理
-  function handleStartPause(video, sessionId) {
-    if (video) {
-      const isPaused = video.paused;
-      console.log(`[EXT] video found paused=${isPaused}`);
-
-      const isPlaying = !video.paused && !video.ended && video.readyState >= 2;
-      if (isPlaying) {
-        video.pause();
+    if (isPlaying(video)) {
+      video.pause();
+      isPausedByMe = true;
+      pausedSessionId = sessionId;
+      logger.log(`[EXT] paused by script sessionId=${sessionId}`);
+    } else {
+      if (resumeInFlight) {
         isPausedByMe = true;
         pausedSessionId = sessionId;
-        console.log(`[EXT] paused by script sessionId=${sessionId}`);
+        logger.log(`[EXT] pause ownership transferred to sessionId=${sessionId}`);
       } else {
         isPausedByMe = false;
         pausedSessionId = null;
-        console.log('[EXT] skipped because already paused');
+        logger.log('[EXT] skipped because already paused');
       }
-    } else {
-      console.log('[EXT] video not found');
     }
   }
 
-  // 録音中 (active=true) に動画が勝手に再生状態に戻ってしまった場合の再一時停止処理 (playリスナーのフェールセーフ)
   function applyPauseGuard(video, sessionId) {
-    if (video && isPausedByMe && pausedSessionId === sessionId) {
-      const isPlaying = !video.paused && !video.ended && video.readyState >= 2;
-      if (isPlaying) {
-        video.pause();
-        console.log(`[EXT] pause guard reapplied sessionId=${sessionId}`);
-      }
+    if (isPausedByMe && pausedSessionId === sessionId && isPlaying(video)) {
+      video.pause();
+      logger.log(`[EXT] pause guard reapplied sessionId=${sessionId}`);
     }
   }
 
-  // 録音終了時の再生再開処理
   function handleEndResume(video, sessionId) {
-    if (video) {
-      if (isPausedByMe && pausedSessionId === sessionId) {
-        if (video.paused) {
-          // play() を呼び出す前に状態フラグをクリアし、再生が play リスナーでブロックされるのを防ぐ
-          const targetSessionId = pausedSessionId;
-          isPausedByMe = false;
-          pausedSessionId = null;
-
-          video.play()
-            .then(() => {
-              console.log(`[EXT] resumed by script sessionId=${targetSessionId}`);
-            })
-            .catch(err => {
-              console.error('[EXT] failed to play video:', err);
-            });
-        } else {
-          isPausedByMe = false;
-          pausedSessionId = null;
-        }
-      } else {
-        if (pausedSessionId === null && !isPausedByMe) {
-          console.log('[EXT] skipped because active=false initial state');
-        } else {
-          console.log('[EXT] skipped resume because no video paused by extension');
-        }
-        isPausedByMe = false;
-        pausedSessionId = null;
-      }
-    } else {
-      console.log('[EXT] video not found');
+    activeSessionId = null;
+    if (!video || !isPausedByMe || pausedSessionId !== sessionId) {
       isPausedByMe = false;
       pausedSessionId = null;
+      logger.log(video ? '[EXT] skipped resume because no video paused by extension' : '[EXT] video not found');
+      return;
+    }
+
+    const targetSessionId = pausedSessionId;
+    isPausedByMe = false;
+    pausedSessionId = null;
+    if (!video.paused) return;
+    resumeInFlight = true;
+
+    Promise.resolve(video.play())
+      .then(() => {
+        if (lastStateActive && activeSessionId !== null) {
+          isPausedByMe = true;
+          pausedSessionId = activeSessionId;
+          video.pause();
+          logger.log(`[EXT] resume superseded by active sessionId=${activeSessionId}`);
+          return;
+        }
+        logger.log(`[EXT] resumed by script sessionId=${targetSessionId}`);
+      })
+      .catch(error => logger.error('[EXT] failed to play video:', error))
+      .finally(() => { resumeInFlight = false; });
+  }
+
+  async function pollState() {
+    updateVideoAttachment();
+    if (isRequesting) return;
+    isRequesting = true;
+
+    try {
+      const response = await requestStateWithTimeout();
+      if (!response || !response.success) {
+        logger.error('[EXT] background state request failed', response && response.error);
+        return;
+      }
+
+      const state = response.data;
+      if (!state || typeof state.active !== 'boolean') {
+        throw new Error('invalid state payload');
+      }
+      const currentActive = state.active;
+      const sessionId = state.sessionId;
+      if (typeof sessionId !== 'number' || !Number.isInteger(sessionId) || sessionId < 0) {
+        throw new Error('invalid state sessionId');
+      }
+
+      if (currentActive && !lastStateActive) {
+        blockCounter = 0;
+        handleStartPause(targetVideo, sessionId);
+      } else if (!currentActive && lastStateActive) {
+        handleEndResume(targetVideo, sessionId);
+      } else if (currentActive && lastStateActive) {
+        if (activeSessionId !== null && sessionId !== activeSessionId) {
+          logger.error(`[EXT] active sessionId mismatch expected=${activeSessionId} received=${sessionId}; ownership discarded`);
+          activeSessionId = sessionId;
+          isPausedByMe = false;
+          pausedSessionId = null;
+        } else {
+          activeSessionId = sessionId;
+          applyPauseGuard(targetVideo, sessionId);
+        }
+      }
+      lastStateActive = currentActive;
+    } catch (error) {
+      logger.error(`[EXT] ${error.message}`);
+    } finally {
+      isRequesting = false;
     }
   }
 
-  // YouTube SPA遷移等で古いインターバルが残っている場合、安全にクリーンアップします
-  if (window.__youtubeDictationIntervalId) {
-    clearInterval(window.__youtubeDictationIntervalId);
-    window.__youtubeDictationIntervalId = null;
+  function start() {
+    if (browserWindow.__youtubeDictationIntervalId) clearTimer(browserWindow.__youtubeDictationIntervalId);
+    browserWindow.__youtubeDictationIntervalId = setTimer(pollState, pollingIntervalMs);
   }
 
-  // 新しいポーリングのインターバルをグローバルに登録・開始します
-  window.__youtubeDictationIntervalId = setInterval(pollState, pollingIntervalMs);
+  return {
+    pollState,
+    start,
+    updateVideoAttachment,
+    getState: () => ({ lastStateActive, pausedSessionId, isPausedByMe, blockCounter, targetVideo, activeSessionId, resumeInFlight, isRequesting })
+  };
 }
 
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { createPauseController };
+}
 
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof chrome !== 'undefined') {
+  if (window.__youtubeDictationPauseLoaded) {
+    console.log('[EXT] duplicate content script detected; skipping');
+  } else {
+    window.__youtubeDictationPauseLoaded = true;
+    console.log('[EXT] content script loaded');
+    createPauseController({ window, document, chrome }).start();
+  }
+}

@@ -1,5 +1,7 @@
 # YouTube Dictation Pause Control
 
+[![CI](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml)
+
 Windowsで音声入力中だけYouTubeを自動一時停止するローカル補助ツールです。Typeless または Wispr Flow のホットキーを AutoHotkey v2 で検知し、Brave の YouTube タブだけを拡張機能から制御します。
 
 ## できること
@@ -41,7 +43,7 @@ Typeless / Wispr Flow hotkey
 - Windows 10 / 11
 - Brave Browser または Chromium系ブラウザ
 - AutoHotkey v2
-- Node.js 16以上
+- Node.js 22以上
 
 ## セットアップ
 
@@ -118,8 +120,8 @@ copy config\settings.example.json config\settings.json
 
 | Key | Meaning |
 |---|---|
-| `port` | ローカルHTTP Bridgeの待受ポート。既定値以外に変える場合は `config/settings.json`、`extension/background.js`、`extension/manifest.json` を合わせて変更します |
-| `pollingIntervalMs` | AHK側の状態確認間隔。通常は500msで十分です |
+| `port` | ローカルHTTP Bridgeの待受ポート。標準運用は17654固定です。変更する場合は設定だけでなく、拡張機能・起動・停止スクリプト内の17654もすべて合わせる必要があります |
+| `pollingIntervalMs` | 互換用の設定値です。現行Content Scriptの状態取得間隔は500ms固定で、この値は反映されません |
 | `typelessHotkey` | Typeless用ホットキー |
 | `wisprFlowHotkey` | Wispr Flow用ホットキー |
 | `autoStartServer` | AHK起動時にサーバー未起動なら起動するか |
@@ -127,13 +129,29 @@ copy config\settings.example.json config\settings.json
 
 ## テスト
 
-Node.jsだけでAPI smoke testを実行できます。
+Node.jsだけで回帰テストを実行できます。BraveやAutoHotkeyは使いません。
 
 ```cmd
 npm test
 ```
 
-このテストは一時ポートで `server/server.js` を起動し、`/health`、`/state`、`/reset` の基本動作を確認します。BraveやAutoHotkeyは使いません。
+`npm test` は合計65ケースを確認します。
+
+- 構文・JSONチェック: 8ケース（JSON 2、JavaScript 6）
+- HTTP API: 14ケース（`/health`、`/state`、`/reset`、CORS、異常入力）
+- Content Script: 28ケース（状態遷移、所有権、通信失敗、不正state、多重poll、再生拒否）
+- Background Worker: 15ケース（本番listener境界、HTTP異常、timeout、不正JSON、送信例外）
+
+個別実行もできます。
+
+```cmd
+npm run check
+npm run test:api
+npm run test:extension
+npm run test:background
+```
+
+GitHub ActionsはWindowsとNode.js 22で同じテストをpushとpull requestごとに実行します。実ブラウザとAutoHotkeyを使う確認は自動テストに含まれないため、[docs/state-behavior.md](docs/state-behavior.md) と [docs/e2e-checklist.md](docs/e2e-checklist.md) の手順で確認してください。
 
 ## プライバシーとセキュリティ
 

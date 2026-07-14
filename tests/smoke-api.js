@@ -7,8 +7,9 @@ const { spawn } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 const PORT = 22000 + Math.floor(Math.random() * 20000);
 const LOG_FILE = path.join(os.tmpdir(), `youtube-dictation-pause-smoke-${process.pid}.log`);
+const API_CASE_COUNT = 14;
 
-function request(method, route, body) {
+function request(method, route, body, headers = {}) {
   return new Promise((resolve, reject) => {
     const data = body === undefined ? undefined : JSON.stringify(body);
     const req = http.request(
@@ -17,12 +18,13 @@ function request(method, route, body) {
         port: PORT,
         path: route,
         method,
-        headers: data
-          ? {
-              'Content-Type': 'application/json',
-              'Content-Length': Buffer.byteLength(data)
-            }
-          : undefined,
+        headers: {
+          ...headers,
+          ...(data ? {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(data)
+          } : {})
+        },
         timeout: 1500
       },
       res => {
@@ -111,6 +113,9 @@ async function main() {
     assert.strictEqual(activeState.body.sessionId, 1);
     assert.strictEqual(activeState.body.source, 'test');
 
+    const repeatedActive = await request('POST', '/state', { active: true, source: 'test' });
+    assert.strictEqual(repeatedActive.body.sessionId, 1);
+
     const stillActive = await request('GET', '/state');
     assert.strictEqual(stillActive.body.active, true);
     assert.strictEqual(stillActive.body.sessionId, 1);
@@ -120,12 +125,45 @@ async function main() {
     assert.strictEqual(inactiveState.body.active, false);
     assert.strictEqual(inactiveState.body.sessionId, 1);
 
+    const invalidJson = await new Promise((resolve, reject) => {
+      const req = http.request({ hostname: '127.0.0.1', port: PORT, path: '/state', method: 'POST', headers: { 'Content-Type': 'application/json' } }, res => {
+        let raw = '';
+        res.on('data', chunk => { raw += chunk; });
+        res.on('end', () => resolve({ statusCode: res.statusCode, body: JSON.parse(raw) }));
+      });
+      req.on('error', reject);
+      req.end('{');
+    });
+    assert.strictEqual(invalidJson.statusCode, 400);
+    assert.strictEqual(invalidJson.body.error, 'Invalid JSON');
+
+    const unknownRoute = await request('GET', '/missing');
+    assert.strictEqual(unknownRoute.statusCode, 404);
+
+    const extensionOrigin = 'chrome-extension://test-extension-id';
+    const corsAllowed = await request('GET', '/state', undefined, { Origin: extensionOrigin });
+    assert.strictEqual(corsAllowed.statusCode, 200);
+    assert.strictEqual(corsAllowed.body.active, false);
+
+    const firefoxOrigin = await request('GET', '/state', undefined, { Origin: 'moz-extension://test-extension-id' });
+    assert.strictEqual(firefoxOrigin.statusCode, 200);
+
+    const corsDenied = await request('GET', '/state', undefined, { Origin: 'https://example.com' });
+    assert.strictEqual(corsDenied.statusCode, 403);
+    assert.strictEqual(corsDenied.body.error, 'Origin not allowed');
+
+    const preflight = await request('OPTIONS', '/state', undefined, { Origin: extensionOrigin });
+    assert.strictEqual(preflight.statusCode, 204);
+
     const resetState = await request('POST', '/reset');
     assert.strictEqual(resetState.statusCode, 200);
     assert.strictEqual(resetState.body.active, false);
     assert.strictEqual(resetState.body.sessionId, 0);
 
-    console.log('Smoke API test passed');
+    const afterReset = await request('POST', '/state', { active: true, source: 'test' });
+    assert.strictEqual(afterReset.body.sessionId, 1);
+
+    console.log(`API tests passed: ${API_CASE_COUNT} cases`);
   } catch (err) {
     console.error('Smoke API test failed');
     console.error(err);
