@@ -96,7 +96,15 @@ if "%SERVER_OK%"=="0" (
 echo [SERVER] Server health check passed successfully.
 echo.
 
-:: 6. Launch AutoHotkey Script using the discovered executable path
+:: 6. Remove tracked and orphaned instances of this AHK script
+echo [AHK] Stopping prior matching AutoHotkey instances...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\windows\stop-tracked-processes.ps1" -AhkOnly
+if %errorlevel% neq 0 (
+    echo [ERROR] Failed to clean up prior AutoHotkey instances.
+    exit /b %errorlevel%
+)
+
+:: 7. Launch AutoHotkey Script using the discovered executable path
 echo [AHK] Starting AutoHotkey v2 Script...
 start "" "%AHK_EXE%" "ahk\youtube-dictation-control.ahk"
 ping 127.0.0.1 -n 2 > nul
@@ -107,7 +115,7 @@ echo  [SUCCESS] All services launched!
 echo ==========================================================
 echo.
 echo  * Local Server running on http://127.0.0.1:17654
-echo  * AHK script active (Ctrl+Shift and Ctrl+] are set up)
+echo  * AHK script active (Ctrl+Shift, Ctrl+], reset Ctrl+Alt+R)
 echo  * Logs are saved in: logs\control.log
 echo.
 echo  Note: If you have not loaded the Brave extension,

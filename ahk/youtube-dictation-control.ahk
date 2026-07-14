@@ -11,6 +11,7 @@ SetWorkingDir(A_ScriptDir)
 global PORT := 17654
 global TYPELESS_HOTKEY_RAW := "Ctrl+Shift"
 global WISPR_FLOW_HOTKEY_RAW := "Ctrl+]"
+global RESET_HOTKEY_RAW := "Ctrl+Alt+R"
 global AUTO_START_SERVER := true
 global POLLING_INTERVAL_MS := 500
 
@@ -63,6 +64,20 @@ DeletePidFile(exitReason, exitCode) {
 }
 
 ; --- ログ出力用関数 ---
+AppendLogWithRetry(logFile, logLine) {
+    Loop 5 {
+        try {
+            FileAppend(logLine, logFile, "UTF-8")
+            return true
+        } catch {
+            if (A_Index < 5) {
+                Sleep(25 * A_Index)
+            }
+        }
+    }
+    return false
+}
+
 LogMessage(message) {
     try {
         logDir := A_ScriptDir . "\..\logs"
@@ -71,7 +86,8 @@ LogMessage(message) {
         }
         logFile := logDir . "\control.log"
         timestamp := FormatTime(, "yyyy-MM-dd HH:mm:ss")
-        FileAppend(timestamp . " [AHK] " . message . "`n", logFile, "UTF-8")
+        logLine := timestamp . " [AHK] " . message . "`n"
+        AppendLogWithRetry(logFile, logLine)
     } catch {
         ; ログ書き込みエラー時は無視
     }
@@ -86,7 +102,7 @@ ErrorHandler(err, mode) {
 
 ; --- 設定読み込み ---
 ReadSettings() {
-    global PORT, TYPELESS_HOTKEY_RAW, WISPR_FLOW_HOTKEY_RAW, AUTO_START_SERVER, POLLING_INTERVAL_MS, DEBUG_MODE
+    global PORT, TYPELESS_HOTKEY_RAW, WISPR_FLOW_HOTKEY_RAW, RESET_HOTKEY_RAW, AUTO_START_SERVER, POLLING_INTERVAL_MS, DEBUG_MODE
     settingsPath := A_ScriptDir . "\..\config\settings.json"
     if (FileExist(settingsPath)) {
         try {
@@ -99,6 +115,9 @@ ReadSettings() {
             }
             if (RegExMatch(content, '"wisprFlowHotkey"\s*:\s*"([^"]+)"', &match)) {
                 WISPR_FLOW_HOTKEY_RAW := match[1]
+            }
+            if (RegExMatch(content, '"resetHotkey"\s*:\s*"([^"]+)"', &match)) {
+                RESET_HOTKEY_RAW := match[1]
             }
             if (RegExMatch(content, '"autoStartServer"\s*:\s*(true|false)', &match)) {
                 AUTO_START_SERVER := (match[1] = "true")
@@ -242,6 +261,25 @@ UpdateDictationStatus() {
     }
 }
 
+ResetDictationState(*) {
+    global isTypelessActive, isWisprFlowActive, anyDictationActive
+    global lastTypelessTick, lastWisprFlowTick, DEBUG_MODE
+
+    isTypelessActive := false
+    isWisprFlowActive := false
+    anyDictationActive := false
+    lastTypelessTick := 0
+    lastWisprFlowTick := 0
+
+    LogMessage("manual state reset: all dictation states -> inactive")
+    SendStateToServer(false)
+
+    if (DEBUG_MODE) {
+        ToolTip("Dictation state reset to inactive")
+        SetTimer(() => ToolTip(), -2000)
+    }
+}
+
 ; ==============================================================================
 ; ホットキーイベントハンドラ
 ; ==============================================================================
@@ -301,7 +339,16 @@ ReadSettings()
 ; 2. サーバー生存確認と自動起動
 CheckAndStartServer()
 
-; 3. Wispr Flow ホットキーの登録
+; 3. 状態リセットホットキーの登録
+parsedResetKey := ParseHotkey(RESET_HOTKEY_RAW)
+try {
+    Hotkey(parsedResetKey, ResetDictationState)
+    LogMessage("Registered reset hotkey: " . parsedResetKey)
+} catch as err {
+    LogMessage("ERROR: Failed to register reset hotkey " . parsedResetKey . ": " . err.Message)
+}
+
+; 4. Wispr Flow ホットキーの登録
 parsedWisprKey := ParseHotkey(WISPR_FLOW_HOTKEY_RAW)
 ; 音声入力アプリにキーを通すため pass-through プレフィックス "~" を付与します
 passThroughWisprKey := "~" . parsedWisprKey
@@ -312,7 +359,7 @@ try {
     LogMessage("ERROR: Failed to register Wispr Flow hotkey " . passThroughWisprKey . ": " . err.Message)
 }
 
-; 4. Typeless ホットキーの登録
+; 5. Typeless ホットキーの登録
 if (TYPELESS_HOTKEY_RAW = "Ctrl+Shift") {
     ; デフォルトの Ctrl+Shift は修飾キー単体のため、LControl/LShiftのリリースフックを使用します。
     ; ~ (pass-through) が付いているため、元のOSやTypelessの挙動を全く阻害しません。

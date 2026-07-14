@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { appendLineWithRetry } = require('./log-writer');
 
 const SERVICE_NAME = 'youtube-dictation-pause';
 const VERSION = '1.2.0';
@@ -43,9 +44,14 @@ function logMessage(message) {
     if (!fs.existsSync(logDir)) {
       fs.mkdirSync(logDir, { recursive: true });
     }
-    fs.appendFileSync(LOG_FILE_PATH, logLine, 'utf8');
+    const result = appendLineWithRetry(LOG_FILE_PATH, logLine);
+    if (!result.ok) {
+      const code = result.error?.code || 'UNKNOWN';
+      console.error(`[SERVER] Log write skipped after ${result.attempts} attempts (${code}): ${LOG_FILE_PATH}`);
+    }
   } catch (err) {
-    console.error('Failed to write to log file:', err);
+    const code = err?.code || 'UNKNOWN';
+    console.error(`[SERVER] Log setup failed (${code}): ${LOG_FILE_PATH}`);
   }
 }
 
