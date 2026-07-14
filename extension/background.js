@@ -29,20 +29,29 @@ function createStateResponder(deps = {}) {
   };
 }
 
+function createMessageListener({ getState, console: logger = console } = {}) {
+  return function onMessage(message, _sender, sendResponse) {
+    if (!message || message.type !== 'GET_STATE') return undefined;
+
+    Promise.resolve()
+      .then(() => getState())
+      .then(sendResponse)
+      .catch(error => {
+        const errorMessage = error && error.message ? error.message : String(error);
+        logger.error('[BG] state request failed', errorMessage);
+        sendResponse({ success: false, error: errorMessage });
+      });
+    return true;
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { createStateResponder };
+  module.exports = { createStateResponder, createMessageListener };
 }
 
 if (typeof chrome !== 'undefined' && chrome.runtime) {
   console.log('[BG] background service worker loaded');
   const getState = createStateResponder();
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.type !== 'GET_STATE') return undefined;
-
-    getState().then(sendResponse).catch(error => {
-      sendResponse({ success: false, error: error.message });
-    });
-    return true;
-  });
+  chrome.runtime.onMessage.addListener(createMessageListener({ getState, console }));
 }

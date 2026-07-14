@@ -13,6 +13,6 @@
     "test:background": "node tests/extension-background.js"
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=22"
   }
 }

@@ -1,5 +1,7 @@
 # YouTube Dictation Pause Control
 
+[![CI](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml)
+
 Windowsで音声入力中だけYouTubeを自動一時停止するローカル補助ツールです。Typeless または Wispr Flow のホットキーを AutoHotkey v2 で検知し、Brave の YouTube タブだけを拡張機能から制御します。
 
 ## できること
@@ -41,7 +43,7 @@ Typeless / Wispr Flow hotkey
 - Windows 10 / 11
 - Brave Browser または Chromium系ブラウザ
 - AutoHotkey v2
-- Node.js 16以上
+- Node.js 22以上
 
 ## セットアップ
 
