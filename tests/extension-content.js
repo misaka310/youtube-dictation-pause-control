@@ -33,14 +33,16 @@ class FakeVideo {
   }
 }
 
-function createHarness(states, initialVideo = new FakeVideo()) {
+function createHarness(states, initialVideo = new FakeVideo(), options = {}) {
   let video = initialVideo;
   const logs = [];
   const chrome = {
     runtime: {
       lastError: null,
       sendMessage(_message, callback) {
-        callback({ success: true, data: states.shift() });
+        if (options.sendMessage) return options.sendMessage(_message, callback, chrome.runtime);
+        const next = states.shift();
+        callback(next && Object.prototype.hasOwnProperty.call(next, '__raw') ? next.__raw : { success: true, data: next });
       }
     }
   };
@@ -170,6 +172,46 @@ async function main() {
     vm.runInNewContext(source, context);
     vm.runInNewContext(source, context);
     assert.strictEqual(timers.length, 1);
+  }
+
+  // Failed or invalid responses keep the prior playback ownership and never resume a user-paused video.
+  for (const response of [
+    { __raw: { success: false, error: 'server unavailable' } },
+    { __raw: undefined },
+    { __raw: { success: true, data: undefined } },
+    { __raw: { success: true, data: { active: true, sessionId: 'invalid' } } }
+  ]) {
+    const video = new FakeVideo({ paused: true });
+    const { controller } = createHarness([response], video);
+    await poll(controller);
+    assert.strictEqual(video.playCalls, 0);
+    assert.strictEqual(controller.getState().lastStateActive, false);
+  }
+
+  // Runtime errors and request timeouts are non-destructive.
+  {
+    const video = new FakeVideo({ paused: true });
+    const throwing = createHarness([], video, { sendMessage() { throw new Error('runtime disconnected'); } });
+    await poll(throwing.controller);
+    assert.strictEqual(video.playCalls, 0);
+
+    const timeout = createHarness([], video, { sendMessage() {} });
+    const original = global.setTimeout;
+    global.setTimeout = (callback) => { callback(); return 1; };
+    await poll(timeout.controller);
+    global.setTimeout = original;
+    assert.strictEqual(video.playCalls, 0);
+  }
+
+  // An unresolved request prevents a second poll from issuing a duplicate request.
+  {
+    const callbacks = [];
+    const harness = createHarness([], new FakeVideo(), { sendMessage(_message, callback) { callbacks.push(callback); } });
+    const first = harness.controller.pollState();
+    const second = harness.controller.pollState();
+    assert.strictEqual(callbacks.length, 1);
+    callbacks[0]({ success: true, data: { active: false, sessionId: 0 } });
+    await first; await second;
   }
 
   console.log('Extension content test passed');

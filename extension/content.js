@@ -155,8 +155,14 @@ function createPauseController(deps) {
       }
 
       const state = response.data;
-      const currentActive = !!state.active;
+      if (!state || typeof state.active !== 'boolean') {
+        throw new Error('invalid state payload');
+      }
+      const currentActive = state.active;
       const sessionId = Number.parseInt(state.sessionId, 10);
+      if (!Number.isInteger(sessionId) || sessionId < 0) {
+        throw new Error('invalid state sessionId');
+      }
 
       if (currentActive && !lastStateActive) {
         blockCounter = 0;

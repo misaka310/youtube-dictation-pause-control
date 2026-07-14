@@ -6,10 +6,11 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server/server.js",
-    "test": "npm run check && npm run test:api && npm run test:extension",
+    "test": "npm run check && npm run test:api && npm run test:extension && npm run test:background",
     "check": "node tests/check.js",
     "test:api": "node tests/smoke-api.js",
-    "test:extension": "node tests/extension-content.js"
+    "test:extension": "node tests/extension-content.js",
+    "test:background": "node tests/extension-background.js"
   },
   "engines": {
     "node": ">=16"

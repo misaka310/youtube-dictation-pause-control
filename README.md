@@ -127,13 +127,29 @@ copy config\settings.example.json config\settings.json
 
 ## テスト
 
-Node.jsだけでAPI smoke testを実行できます。
+Node.jsだけで回帰テストを実行できます。BraveやAutoHotkeyは使いません。
 
 ```cmd
 npm test
 ```
 
-このテストは一時ポートで `server/server.js` を起動し、`/health`、`/state`、`/reset` の基本動作を確認します。BraveやAutoHotkeyは使いません。
+`npm test` は次を確認します。
+
+- JavaScript構文とJSON構文
+- 一時ポートで起動するHTTP API（`/health`、`/state`、`/reset`、CORS、異常入力）
+- 偽動画・偽Document・偽Chrome APIを使うContent Scriptの状態遷移
+- 偽fetchを使うBackground Workerの成功・HTTP異常・タイムアウト・不正JSON・通信失敗
+
+個別実行もできます。
+
+```cmd
+npm run check
+npm run test:api
+npm run test:extension
+npm run test:background
+```
+
+GitHub ActionsはWindowsとNode.js 22で同じテストをpushとpull requestごとに実行します。実ブラウザとAutoHotkeyを使う確認は自動テストに含まれないため、[docs/state-behavior.md](docs/state-behavior.md) と [docs/e2e-checklist.md](docs/e2e-checklist.md) の手順で確認してください。
 
 ## プライバシーとセキュリティ
 
@@ -162,21 +178,3 @@ Native Messaging を使う案は、レジストリ・絶対パス・Service Work
 ## License
 
 MIT License. See `LICENSE`.
-
-## Verification and CI
-
-Run the full local regression suite with:
-
-```cmd
-npm test
-```
-
-The suite validates JavaScript and JSON syntax, the local HTTP API, and content-script state transitions with fake videos, documents, and Chrome APIs. Each part can also run independently:
-
-```cmd
-npm run check
-npm run test:api
-npm run test:extension
-```
-
-GitHub Actions runs the same suite on `windows-latest` for every push and pull request. For browser-facing behavior and manual verification, see [docs/state-behavior.md](docs/state-behavior.md) and [docs/e2e-checklist.md](docs/e2e-checklist.md).
