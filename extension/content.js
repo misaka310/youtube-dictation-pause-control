@@ -7,6 +7,8 @@ function createPauseController(deps) {
   const logger = deps.console || console;
   const setTimer = deps.setInterval || setInterval;
   const clearTimer = deps.clearInterval || clearInterval;
+  const setRequestTimer = deps.setTimeout || setTimeout;
+  const clearRequestTimer = deps.clearTimeout || clearTimeout;
   const requestTimeoutMs = deps.requestTimeoutMs || 1000;
   const pollingIntervalMs = deps.pollingIntervalMs || 500;
 
@@ -52,7 +54,7 @@ function createPauseController(deps) {
   function requestStateWithTimeout() {
     return new Promise((resolve, reject) => {
       let settled = false;
-      const timeout = setTimeout(() => {
+      const timeout = setRequestTimer(() => {
         if (!settled) {
           settled = true;
           reject(new Error('background request timeout'));
@@ -61,7 +63,7 @@ function createPauseController(deps) {
 
       try {
         runtime.sendMessage({ type: 'GET_STATE' }, response => {
-          clearTimeout(timeout);
+          clearRequestTimer(timeout);
           if (settled) return;
           settled = true;
           if (runtime.lastError) {
@@ -71,7 +73,7 @@ function createPauseController(deps) {
           resolve(response);
         });
       } catch (error) {
-        clearTimeout(timeout);
+        clearRequestTimer(timeout);
         if (!settled) {
           settled = true;
           reject(error);
@@ -159,8 +161,8 @@ function createPauseController(deps) {
         throw new Error('invalid state payload');
       }
       const currentActive = state.active;
-      const sessionId = Number.parseInt(state.sessionId, 10);
-      if (!Number.isInteger(sessionId) || sessionId < 0) {
+      const sessionId = state.sessionId;
+      if (typeof sessionId !== 'number' || !Number.isInteger(sessionId) || sessionId < 0) {
         throw new Error('invalid state sessionId');
       }
 
@@ -170,7 +172,15 @@ function createPauseController(deps) {
       } else if (!currentActive && lastStateActive) {
         handleEndResume(targetVideo, sessionId);
       } else if (currentActive && lastStateActive) {
-        applyPauseGuard(targetVideo, sessionId);
+        if (activeSessionId !== null && sessionId !== activeSessionId) {
+          logger.error(`[EXT] active sessionId mismatch expected=${activeSessionId} received=${sessionId}; ownership discarded`);
+          activeSessionId = sessionId;
+          isPausedByMe = false;
+          pausedSessionId = null;
+        } else {
+          activeSessionId = sessionId;
+          applyPauseGuard(targetVideo, sessionId);
+        }
       }
       lastStateActive = currentActive;
     } catch (error) {
@@ -189,7 +199,7 @@ function createPauseController(deps) {
     pollState,
     start,
     updateVideoAttachment,
-    getState: () => ({ lastStateActive, pausedSessionId, isPausedByMe, blockCounter, targetVideo, activeSessionId, resumeInFlight })
+    getState: () => ({ lastStateActive, pausedSessionId, isPausedByMe, blockCounter, targetVideo, activeSessionId, resumeInFlight, isRequesting })
   };
 }
 

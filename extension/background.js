@@ -30,17 +30,32 @@ function createStateResponder(deps = {}) {
 }
 
 function createMessageListener({ getState, console: logger = console } = {}) {
+  function safeSendResponse(sendResponse, payload) {
+    try {
+      sendResponse(payload);
+      return true;
+    } catch (error) {
+      const errorMessage = error && error.message ? error.message : String(error);
+      logger.error('[BG] sendResponse failed', errorMessage);
+      return false;
+    }
+  }
+
   return function onMessage(message, _sender, sendResponse) {
     if (!message || message.type !== 'GET_STATE') return undefined;
 
     Promise.resolve()
       .then(() => getState())
-      .then(sendResponse)
-      .catch(error => {
-        const errorMessage = error && error.message ? error.message : String(error);
-        logger.error('[BG] state request failed', errorMessage);
-        sendResponse({ success: false, error: errorMessage });
-      });
+      .then(
+        response => {
+          safeSendResponse(sendResponse, response);
+        },
+        error => {
+          const errorMessage = error && error.message ? error.message : String(error);
+          logger.error('[BG] state request failed', errorMessage);
+          safeSendResponse(sendResponse, { success: false, error: errorMessage });
+        }
+      );
     return true;
   };
 }

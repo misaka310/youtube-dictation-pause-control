@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 const PORT = 22000 + Math.floor(Math.random() * 20000);
 const LOG_FILE = path.join(os.tmpdir(), `youtube-dictation-pause-smoke-${process.pid}.log`);
+const API_CASE_COUNT = 14;
 
 function request(method, route, body, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -162,7 +163,7 @@ async function main() {
     const afterReset = await request('POST', '/state', { active: true, source: 'test' });
     assert.strictEqual(afterReset.body.sessionId, 1);
 
-    console.log('Smoke API test passed');
+    console.log(`API tests passed: ${API_CASE_COUNT} cases`);
   } catch (err) {
     console.error('Smoke API test failed');
     console.error(err);
