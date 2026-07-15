@@ -6,11 +6,9 @@ Windowsで音声入力中だけYouTubeを自動一時停止するローカル補
 
 ## 動作デモ
 
-<video src="docs/demo/youtube-dictation-demo.mp4" poster="docs/demo/youtube-dictation-demo-poster.png" controls playsinline width="100%">
-  <a href="docs/demo/youtube-dictation-demo.mp4">
-    <img src="docs/demo/youtube-dictation-demo-poster.png" alt="音声入力の開始でYouTubeが停止し、終了で再開する17秒の音声付きデモ" width="100%">
-  </a>
-</video>
+[![音声入力の開始でYouTubeが停止し、終了で再開する17秒のデモ](docs/demo/youtube-dictation-demo.gif)](docs/demo/youtube-dictation-demo.mp4)
+
+上のプレビューをクリックすると、catキャラクターのTTSナレーションとBGMを含む音声付きMP4を再生できます。
 
 実際のBrave、拡張機能、AutoHotkey、ローカルHTTP Bridgeを使い、音声入力の開始で停止し、終了で再開する流れを収録しています。デモ映像: Big Buck Bunny、Blender、Creative Commons Attribution。
 
