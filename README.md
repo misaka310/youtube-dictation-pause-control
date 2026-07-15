@@ -6,9 +6,9 @@ Windowsで音声入力中だけYouTubeを自動一時停止するローカル補
 
 ## 動作デモ
 
-[![ショートカットキーで音声入力を開始するとYouTube風プレイヤーが停止し、終了すると再開する24秒のデモ](docs/demo/youtube-dictation-demo.gif)](docs/demo/youtube-dictation-demo.mp4)
+https://github.com/user-attachments/assets/a8541fb9-1728-41ec-9533-6d8fb5dd342b
 
-上のプレビューをクリックすると、catキャラクターのTTSナレーションとBGMを含む音声付きMP4を再生できます。
+上の動画プレイヤーで、catキャラクターのTTSナレーションとBGMを含む音声付きMP4を再生できます。
 
 YouTube風の説明用フロントで、`Ctrl + ]`を押して音声入力を開始すると動画が停止し、もう一度押して終了すると自動再生する流れを示しています。画面は操作説明用に作成したデモUIです。
 
