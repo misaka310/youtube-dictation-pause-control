@@ -9,11 +9,11 @@
 - リポジトリ直下の`start.bat`でHTTP BridgeとAHKを起動する。
 - `http://127.0.0.1:17654/health`が`ok: true`を返すことを確認する。
 - `logs/control.log`とYouTubeタブのDevToolsコンソールを開く。
-- 各ケース開始前に、Typeless / Wispr Flowが録音していないことを確認する。状態が不明ならAHKを再起動し、`curl.exe -X POST http://127.0.0.1:17654/reset`を実行する。
+- 各ケース開始前に、Typeless / Wispr Flowが録音していないことを確認する。AHK内部状態が不明なら入力アプリを停止して`Ctrl + Alt + R`を押す。Bridgeだけを初期化する必要がある場合に限り、`curl.exe -X POST http://127.0.0.1:17654/reset`を使用する。
 
 ## 記録ルール
 
-各ケースの「実施結果欄」は、実際に操作した場合だけ更新します。今回の文書更新時点では、下記19ケースはすべて実ブラウザ未実施です。
+各ケースの「実施結果欄」は、実際に操作した場合だけ更新します。今回の文書更新時点では、下記20ケースはすべて実ブラウザ未実施です。
 
 ---
 
@@ -428,7 +428,7 @@
 - AHK内部状態とBridge状態を別々に確認。
 
 **復旧方法**
-- 入力を終了してAHKを再起動し、再度`/reset`する。動画は手動再生する。
+- AHK状態も初期化する場合は、入力を終了して`Ctrl + Alt + R`を押す。動画は必要に応じて手動再生する。
 
 **実施結果欄**
 - 状態: 未実施
@@ -632,4 +632,44 @@
 - 状態: 未実施
 - 実施日時:
 - 拒否の再現方法:
+- 結果・ログ:
+
+---
+
+## 20. 状態同期リセットホットキー
+
+**前提条件**
+- Typeless / Wispr Flowを実際には停止している。
+- AHK内部状態を意図的にactiveへずらし、Bridge `/state`が`active=true`であることを確認する。
+- YouTube動画がこのツールにより停止中である。
+
+**操作手順**
+1. `Ctrl + Alt + R`を押す。
+2. Bridge `/state`、`logs/control.log`、動画状態を確認する。
+3. 通常の音声入力ホットキーを1回押す。
+
+**期待結果**
+- リセット時にAHKのTypeless・Wispr Flow・集約状態がinactiveへ戻る。
+- Bridgeへ`active=false`が送られる。
+- 同一sessionでこのツールが停止した動画は再生を試みる。
+- 次の通常ホットキー1回目が開始扱いとなり、再生中動画を停止する。
+
+**確認ログ**
+- AHK: `manual state reset: all dictation states -> inactive`
+- AHK: `POST /state sending: active=false`と`POST /state succeeded`
+- Server: `POST /state active=false`
+- 次の通常ホットキーで`state changed: inactive -> active`
+
+**失敗時の切り分け**
+- リセットログがない: `resetHotkey`設定、AHK再起動、ホットキー競合を確認する。
+- AHKログはあるがBridgeがactiveのまま: `/health`とPOST失敗ログを確認する。
+- 動画が再生しない: Content Scriptの所有権、sessionId、`video.play()`拒否を確認する。
+
+**復旧方法**
+- 入力アプリを停止し、AHKとNode.jsを再起動してから再度`Ctrl + Alt + R`を押す。動画は必要に応じて手動再生する。
+
+**実施結果欄**
+- 状態: 未実施
+- 実施日時:
+- ブラウザ / バージョン:
 - 結果・ログ:

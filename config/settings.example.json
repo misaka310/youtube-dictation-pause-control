@@ -3,6 +3,7 @@
   "pollingIntervalMs": 500,
   "typelessHotkey": "Ctrl+Shift",
   "wisprFlowHotkey": "Ctrl+]",
+  "resetHotkey": "Ctrl+Alt+R",
   "autoStartServer": true,
   "debugMode": false
 }

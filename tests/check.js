@@ -5,7 +5,17 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const jsonFiles = ['extension/manifest.json', 'config/settings.example.json'];
-const javascriptFiles = ['extension/content.js', 'extension/background.js', 'server/server.js', 'tests/extension-content.js', 'tests/extension-background.js', 'tests/smoke-api.js'];
+const javascriptFiles = [
+  'extension/content.js',
+  'extension/background.js',
+  'server/server.js',
+  'server/log-writer.js',
+  'tests/extension-content.js',
+  'tests/extension-background.js',
+  'tests/smoke-api.js',
+  'tests/log-writer.js',
+  'tests/ahk-contract.js'
+];
 
 for (const file of jsonFiles) {
   assert.doesNotThrow(() => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8')), `${file} must be valid JSON`);
