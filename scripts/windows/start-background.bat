@@ -50,6 +50,12 @@ if "%SERVER_OK%"=="0" (
     exit /b 1
 )
 
-:: 5. Launch AutoHotkey Script
+:: 5. Remove tracked and orphaned instances of this AHK script
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\windows\stop-tracked-processes.ps1" -AhkOnly >nul
+if %errorlevel% neq 0 (
+    exit /b %errorlevel%
+)
+
+:: 6. Launch AutoHotkey Script
 start "" "%AHK_EXE%" "ahk\youtube-dictation-control.ahk"
 exit /b 0
