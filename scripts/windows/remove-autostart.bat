@@ -1,26 +1,12 @@
 @echo off
-title YouTube Dictation Pause - Remove Autostart
-cls
+setlocal
+set "STARTUP_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+set "CURRENT_SHORTCUT=%STARTUP_DIR%\YouTube Dictation Pause Control.lnk"
+set "LEGACY_SHORTCUT=%STARTUP_DIR%\YouTubeDictationPause.lnk"
 
-echo ==========================================================
-echo  YouTube Dictation Pause Control - Remove Autostart
-echo ==========================================================
-echo.
-echo  This script removes the autostart shortcut.
-echo.
+if exist "%CURRENT_SHORTCUT%" del /f /q "%CURRENT_SHORTCUT%"
+if exist "%LEGACY_SHORTCUT%" del /f /q "%LEGACY_SHORTCUT%"
 
-set "SHORTCUT_PATH=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\YouTubeDictationPause.lnk"
-
-if exist "%SHORTCUT_PATH%" (
-    del "%SHORTCUT_PATH%"
-    echo ==========================================================
-    echo  [SUCCESS] Autostart shortcut successfully removed.
-    echo ==========================================================
-    echo.
-) else (
-    echo  Autostart shortcut was not found in: Startup folder.
-    echo  Nothing to do.
-    echo.
-)
-
+echo [SUCCESS] Startup shortcuts removed if present.
 pause
+exit /b 0

@@ -1,15 +1,29 @@
 # 実ブラウザE2Eチェックリスト
 
-この文書は、実際のWindows、AutoHotkey v2、Typeless / Wispr Flow、Chromium系ブラウザ、YouTube画面で行う手動確認用です。Node.jsだけの自動テスト結果を実ブラウザE2Eの実施結果として転記しないでください。
+この文書は、実際のWindows、配布版`YouTubeDictationControl.exe`、Typeless / Wispr Flow、Chromium系ブラウザ、YouTube画面で行う手動確認用です。Node.jsだけの自動テスト結果を実ブラウザE2Eの実施結果として転記しないでください。
 
 ## 共通準備
 
-- Node.js 22以上、AutoHotkey v2、Chromium系ブラウザ、Typeless / Wispr Flowを用意する。
+- Node.js 22以上、Chromium系ブラウザ、Typeless / Wispr Flowを用意する。配布版の利用にAutoHotkeyの別インストールは不要。
 - `extension`をパッケージ化されていない拡張機能として読み込む。
-- リポジトリ直下の`start.bat`でHTTP BridgeとAHKを起動する。
-- `http://127.0.0.1:17654/health`が`ok: true`を返すことを確認する。
+- 配布フォルダの`YouTubeDictationControl.exe`を起動する。
+- ターミナルが開いたままにならず、Windows右下の通知領域にアイコンが表示されることを確認する。
+- 通知領域メニューの`Status: ...`が`running`になり、`http://127.0.0.1:17654/health`が`ok: true`を返すことを確認する。
 - `logs/control.log`とYouTubeタブのDevToolsコンソールを開く。
-- 各ケース開始前に、Typeless / Wispr Flowが録音していないことを確認する。AHK内部状態が不明なら入力アプリを停止して`Ctrl + Alt + R`を押す。Bridgeだけを初期化する必要がある場合に限り、`curl.exe -X POST http://127.0.0.1:17654/reset`を使用する。
+- 各ケース開始前に、Typeless / Wispr Flowが録音していないことを確認する。内部状態が不明なら入力アプリを停止して`Ctrl + Alt + R`または通知領域の`Reset dictation state`を実行する。Bridgeだけを初期化する必要がある場合に限り、`curl.exe -X POST http://127.0.0.1:17654/reset`を使用する。
+
+## 常駐アプリの事前確認
+
+1. 通知領域メニューから`Open log`を選び、現在の配布フォルダの`logs/control.log`が開くこと。
+2. `Restart local bridge`を選び、Bridgeが再び`running`になること。
+3. `Start with Windows`をオン・オフし、現在のユーザーのスタートアップフォルダにショートカットが作成・削除されること。
+4. `Exit`を選び、通知領域アイコンと、このEXEが起動したNode.jsだけが終了すること。
+5. 自動検証可能な範囲は次を実行し、`recoveryVerified`と`ownedShutdownVerified`がともに`true`になること。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-release-runtime.ps1 `
+  -PackageDirectory dist\YouTubeDictationPauseControl-1.2.0
+```
 
 ## 記録ルール
 
@@ -287,14 +301,15 @@
 - 入力開始で動画が停止し、所有権がある。
 
 **操作手順**
-1. Node.js HTTP Bridgeだけを停止する。
-2. 数回のpoll時間を待つ。
-3. 動画が勝手に再生しないことを確認する。
-4. Node.jsを再起動する。
+1. 通知領域常駐EXEが起動したNode.js HTTP Bridgeだけをタスクマネージャーなどで停止する。
+2. 健康確認2回と再起動間隔を含め、最大25秒程度待つ。
+3. 待機中に動画が勝手に再生しないことを確認する。
+4. `/health`が再び`ok: true`を返し、停止前とは異なるNode.js PIDで復旧したことを確認する。
 
 **期待結果**
-- Background Workerのfetchが失敗する。
+- 復旧までの間はBackground Workerのfetchが失敗する。
 - Content Scriptは直前のactive状態と所有権を維持し、通信失敗だけで再生しない。
+- 連続2回の健康確認失敗後、常駐EXEが所有していたBridgeを新しいPIDで自動起動する。
 
 **確認ログ**
 - Background: `[BG] fetch failed ...`
@@ -304,7 +319,7 @@
 - 本当に対象Node.jsだけを止めたか、別プロセスが同じポートで応答していないか確認。
 
 **復旧方法**
-- Node.js再起動後、実録音状態とBridge状態を合わせる。ずれた場合は入力終了、AHK再起動、`/reset`、動画手動再生。
+- 自動復旧しない場合は通知領域の`Restart local bridge`を使用する。状態がずれた場合は入力終了後に`Reset dictation state`を実行し、必要なら動画を手動再生する。
 
 **実施結果欄**
 - 状態: 未実施

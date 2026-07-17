@@ -1,61 +1,26 @@
 @echo off
+setlocal
 set "ROOT_DIR=%~dp0..\.."
 for %%I in ("%ROOT_DIR%") do set "ROOT_DIR=%%~fI"
 cd /d "%ROOT_DIR%"
 
-:: 1. AutoHotkey v2 executable path discovery
+if exist "%ROOT_DIR%\YouTubeDictationControl.exe" (
+    start "" "%ROOT_DIR%\YouTubeDictationControl.exe"
+    exit /b 0
+)
+
 set "AHK_EXE="
-if exist "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" (
-    set "AHK_EXE=C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe"
-) else if exist "C:\Program Files\AutoHotkey\v2\AutoHotkey32.exe" (
-    set "AHK_EXE=C:\Program Files\AutoHotkey\v2\AutoHotkey32.exe"
-) else if exist "C:\Program Files\AutoHotkey\AutoHotkey.exe" (
-    set "AHK_EXE=C:\Program Files\AutoHotkey\AutoHotkey.exe"
-) else (
-    where AutoHotkey.exe >nul 2>nul
-    if %errorlevel% equ 0 (
-        set "AHK_EXE=AutoHotkey.exe"
-    )
-)
+if exist "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" set "AHK_EXE=C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe"
+if not defined AHK_EXE if exist "C:\Program Files\AutoHotkey\v2\AutoHotkey32.exe" set "AHK_EXE=C:\Program Files\AutoHotkey\v2\AutoHotkey32.exe"
+if not defined AHK_EXE if exist "C:\Program Files\AutoHotkey\AutoHotkey.exe" set "AHK_EXE=C:\Program Files\AutoHotkey\AutoHotkey.exe"
+if not defined AHK_EXE for /f "delims=" %%I in ('where AutoHotkey.exe 2^>nul') do if not defined AHK_EXE set "AHK_EXE=%%I"
+if not defined AHK_EXE exit /b 1
 
-if "%AHK_EXE%"=="" (
-    exit /b 1
-)
+"%AHK_EXE%" /ErrorStdOut /Validate "%ROOT_DIR%\ahk\youtube-dictation-control.ahk"
+if errorlevel 1 exit /b 1
 
-:: 2. Validate AHK Script syntax before proceeding
-"%AHK_EXE%" /Validate "ahk\youtube-dictation-control.ahk"
-if %errorlevel% neq 0 (
-    exit /b %errorlevel%
-)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%\scripts\windows\stop-tracked-processes.ps1" -AhkOnly >nul
+if errorlevel 1 exit /b 1
 
-:: 3. Check if Server is already running on port 17654 using case-insensitive check
-netstat -ano | findstr /i "17654" >nul 2>nul
-if %errorlevel% neq 0 (
-    start "YouTube Dictation Server" /min cmd.exe /c "server\start-server.bat"
-)
-
-:: 4. Verify Server health status (up to 6 attempts) using native curl and ping
-set "SERVER_OK=0"
-for /l %%i in (1,1,6) do (
-    ping 127.0.0.1 -n 2 > nul
-    curl -s --max-time 1 http://127.0.0.1:17654/health | findstr "youtube-dictation-pause" >nul 2>nul
-    if %errorlevel% equ 0 (
-        set "SERVER_OK=1"
-        goto :server_healthy
-    )
-)
-
-:server_healthy
-if "%SERVER_OK%"=="0" (
-    exit /b 1
-)
-
-:: 5. Remove tracked and orphaned instances of this AHK script
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\windows\stop-tracked-processes.ps1" -AhkOnly >nul
-if %errorlevel% neq 0 (
-    exit /b %errorlevel%
-)
-
-:: 6. Launch AutoHotkey Script
-start "" "%AHK_EXE%" "ahk\youtube-dictation-control.ahk"
+start "" "%AHK_EXE%" "%ROOT_DIR%\ahk\youtube-dictation-control.ahk"
 exit /b 0

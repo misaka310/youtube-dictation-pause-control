@@ -1,27 +1,31 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 SendMode("Input")
-SetWorkingDir(A_ScriptDir)
 
-; ==============================================================================
-; YouTube Dictation Pause Control - Main Keyboard Monitoring Script (HTTP Bridge)
-; ==============================================================================
+GetParentDirectory(path) {
+    SplitPath(path, &leafName, &parentDirectory)
+    return parentDirectory
+}
 
-; --- 設定のグローバル変数 ---
+; Source mode runs from ahk/. The compiled release executable runs from the package root.
+global APP_ROOT := A_IsCompiled ? A_ScriptDir : GetParentDirectory(A_ScriptDir)
+global SETTINGS_FILE := APP_ROOT . "\config\settings.json"
+global SERVER_SCRIPT := APP_ROOT . "\server\server.js"
+global LOG_FILE := APP_ROOT . "\logs\control.log"
+global RUNTIME_DIR := APP_ROOT . "\runtime"
+global AHK_PID_FILE := RUNTIME_DIR . "\youtube-dictation-ahk.pid"
+global STARTUP_SHORTCUT_NAME := "YouTube Dictation Pause Control.lnk"
+
+SetWorkingDir(APP_ROOT)
+
 global PORT := 17654
 global TYPELESS_HOTKEY_RAW := "Ctrl+Shift"
 global WISPR_FLOW_HOTKEY_RAW := "Ctrl+]"
 global RESET_HOTKEY_RAW := "Ctrl+Alt+R"
 global AUTO_START_SERVER := true
 global POLLING_INTERVAL_MS := 500
-
-global RUNTIME_DIR := A_ScriptDir . "\..\runtime"
-global AHK_PID_FILE := RUNTIME_DIR . "\youtube-dictation-ahk.pid"
-
-; デバッグモード (true の場合、状態変更時に画面上にポップアップ通知（ToolTip）を表示します)
 global DEBUG_MODE := false
 
-; --- 内部状態管理変数 ---
 global isTypelessActive := false
 global isWisprFlowActive := false
 global anyDictationActive := false
@@ -29,7 +33,15 @@ global lastTypelessTick := 0
 global lastWisprFlowTick := 0
 global DEBOUNCE_MS := 400
 
-; --- PID管理 ---
+global HEALTH_CHECK_INTERVAL_MS := 5000
+global HEALTH_FAILURE_THRESHOLD := 2
+global SERVER_RESTART_MIN_INTERVAL_MS := 10000
+global ownedServerPid := 0
+global consecutiveHealthFailures := 0
+global lastServerStartTick := 0
+global bridgeStatus := "starting"
+global trayStatusLabel := "Status: starting"
+
 GetCurrentProcessId() {
     return DllCall("GetCurrentProcessId", "UInt")
 }
@@ -44,12 +56,12 @@ WritePidFile() {
             FileDelete(AHK_PID_FILE)
         }
         FileAppend(GetCurrentProcessId() . "`n", AHK_PID_FILE, "UTF-8")
-    } catch {
-        ; PID書き込みエラー時は無視
+    } catch as err {
+        LogMessage("WARNING: Failed to write controller PID file: " . err.Message)
     }
 }
 
-DeletePidFile(exitReason, exitCode) {
+DeletePidFile(exitReason := "", exitCode := 0) {
     global AHK_PID_FILE
     try {
         if (FileExist(AHK_PID_FILE)) {
@@ -59,11 +71,10 @@ DeletePidFile(exitReason, exitCode) {
             }
         }
     } catch {
-        ; PID削除エラー時は無視
+        ; Cleanup errors must not block application exit.
     }
 }
 
-; --- ログ出力用関数 ---
 AppendLogWithRetry(logFile, logLine) {
     Loop 5 {
         try {
@@ -79,34 +90,33 @@ AppendLogWithRetry(logFile, logLine) {
 }
 
 LogMessage(message) {
+    global LOG_FILE, APP_ROOT
     try {
-        logDir := A_ScriptDir . "\..\logs"
+        logDir := APP_ROOT . "\logs"
         if (!DirExist(logDir)) {
             DirCreate(logDir)
         }
-        logFile := logDir . "\control.log"
         timestamp := FormatTime(, "yyyy-MM-dd HH:mm:ss")
         logLine := timestamp . " [AHK] " . message . "`n"
-        AppendLogWithRetry(logFile, logLine)
+        AppendLogWithRetry(LOG_FILE, logLine)
     } catch {
-        ; ログ書き込みエラー時は無視
+        ; Logging must never terminate the controller.
     }
 }
 
-; --- グローバル例外ハンドラ ---
 OnError(ErrorHandler)
 ErrorHandler(err, mode) {
     LogMessage("FATAL ERROR: " . err.Message . " (Line: " . err.Line . ", File: " . err.File . ")")
-    return 1 ; エラーダイアログのポップアップを抑制してハングを防止
+    return 1
 }
 
-; --- 設定読み込み ---
 ReadSettings() {
-    global PORT, TYPELESS_HOTKEY_RAW, WISPR_FLOW_HOTKEY_RAW, RESET_HOTKEY_RAW, AUTO_START_SERVER, POLLING_INTERVAL_MS, DEBUG_MODE
-    settingsPath := A_ScriptDir . "\..\config\settings.json"
-    if (FileExist(settingsPath)) {
+    global SETTINGS_FILE, PORT, TYPELESS_HOTKEY_RAW, WISPR_FLOW_HOTKEY_RAW
+    global RESET_HOTKEY_RAW, AUTO_START_SERVER, POLLING_INTERVAL_MS, DEBUG_MODE
+
+    if (FileExist(SETTINGS_FILE)) {
         try {
-            content := FileRead(settingsPath, "UTF-8")
+            content := FileRead(SETTINGS_FILE, "UTF-8")
             if (RegExMatch(content, '"port"\s*:\s*(\d+)', &match)) {
                 PORT := Integer(match[1])
             }
@@ -128,7 +138,7 @@ ReadSettings() {
             if (RegExMatch(content, '"debugMode"\s*:\s*(true|false)', &match)) {
                 DEBUG_MODE := (match[1] = "true")
             }
-            LogMessage("Loaded settings successfully from settings.json. Port: " . PORT . " DebugMode: " . (DEBUG_MODE ? "true" : "false"))
+            LogMessage("Loaded settings successfully. Port: " . PORT . " DebugMode: " . (DEBUG_MODE ? "true" : "false"))
         } catch as err {
             LogMessage("WARNING: Failed to parse settings.json (" . err.Message . "). Using defaults.")
         }
@@ -137,12 +147,11 @@ ReadSettings() {
     }
 }
 
-; --- ホットキー変換関数 ---
 ParseHotkey(keyStr) {
     if (keyStr = "Ctrl+Shift") {
         return "Ctrl+Shift"
     }
-    
+
     res := keyStr
     res := StrReplace(res, "Ctrl+", "^")
     res := StrReplace(res, "Shift+", "+")
@@ -151,96 +160,348 @@ ParseHotkey(keyStr) {
     return res
 }
 
-; --- サーバーヘルスチェック＆自動起動 ---
-CheckAndStartServer() {
-    global PORT, AUTO_START_SERVER
-    url := "http://127.0.0.1:" . PORT . "/health"
-    
-    isServerOk := false
-    try {
-        whr := ComObject("WinHttp.WinHttpRequest.5.1")
-        whr.Open("GET", url, false)
-        whr.Send()
-        whr.WaitForResponse(1)
-        if (whr.Status = 200 && InStr(whr.ResponseText, '"ok":true')) {
-            isServerOk := true
-            LogMessage("server health ok")
-        }
-    } catch {
-        isServerOk := false
-    }
-    
-    if (!isServerOk) {
-        LogMessage("server health failed")
-        if (AUTO_START_SERVER) {
-            LogMessage("server auto-start attempted")
-            batPath := A_ScriptDir . "\..\server\start-server.bat"
-            if (FileExist(batPath)) {
-                ; 最小化したコマンドウィンドウとしてバッチを実行
-                Run('cmd.exe /c start "YouTube Dictation Server" /min "' . batPath . '"',, "Hide")
-                ; サーバーの起動待ち
-                Sleep(2000)
-                
-                ; 起動後の再確認
-                try {
-                    whr2 := ComObject("WinHttp.WinHttpRequest.5.1")
-                    whr2.Open("GET", url, false)
-                    whr2.Send()
-                    whr2.WaitForResponse(1)
-                    if (whr2.Status = 200 && InStr(whr2.ResponseText, '"ok":true')) {
-                        LogMessage("server health ok after auto-start")
-                        return
-                    }
-                } catch {
-                    ; ignore
-                }
-                LogMessage("WARNING: Server auto-start triggered but health check still failed.")
-            } else {
-                LogMessage("ERROR: start-server.bat not found at " . batPath)
-            }
-        } else {
-            LogMessage("WARNING: Server is not running and autoStartServer is false.")
+ResolveNodeExecutable() {
+    localAppData := EnvGet("LOCALAPPDATA")
+    candidates := [
+        A_ProgramFiles . "\nodejs\node.exe",
+        localAppData . "\Programs\nodejs\node.exe"
+    ]
+
+    for candidate in candidates {
+        if (FileExist(candidate)) {
+            return candidate
         }
     }
+
+    pathValue := EnvGet("PATH")
+    for pathPart in StrSplit(pathValue, ";") {
+        cleanPart := StrReplace(Trim(pathPart), '"', "")
+        if (cleanPart = "") {
+            continue
+        }
+        candidate := cleanPart . "\node.exe"
+        if (FileExist(candidate)) {
+            return candidate
+        }
+    }
+
+    return ""
 }
 
-; --- HTTP送信関数 ---
-SendStateToServer(activeVal) {
+IsCompatibleBridgeHealthy() {
     global PORT
-    url := "http://127.0.0.1:" . PORT . "/state"
-    body := '{"active": ' . (activeVal ? "true" : "false") . ', "source": "ahk"}'
-    
-    LogMessage("POST /state sending: " . (activeVal ? "active=true" : "active=false"))
-    
+    url := "http://127.0.0.1:" . PORT . "/health"
     try {
         whr := ComObject("WinHttp.WinHttpRequest.5.1")
-        whr.Open("POST", url, false)
-        whr.SetRequestHeader("Content-Type", "application/json")
-        whr.Send(body)
-        whr.WaitForResponse(2)
-        
-        status := whr.Status
-        responseText := whr.ResponseText
-        
-        if (status = 200) {
-            LogMessage("POST /state succeeded")
-            return true
-        } else {
-            LogMessage("POST /state failed. HTTP Status: " . status)
-            return false
-        }
-    } catch as err {
-        LogMessage("POST /state failed. Error: " . err.Message)
+        whr.SetTimeouts(500, 500, 1000, 1000)
+        whr.Open("GET", url, false)
+        whr.Send()
+        return whr.Status = 200
+            && InStr(whr.ResponseText, '"ok":true')
+            && InStr(whr.ResponseText, '"service":"youtube-dictation-pause"')
+    } catch {
         return false
     }
 }
 
-; --- 状態更新と送信判定 ---
+IsOwnedServerProcess(pid) {
+    global SERVER_SCRIPT
+    if (!pid || !ProcessExist(pid)) {
+        return false
+    }
+
+    try {
+        query := "Select Name, CommandLine from Win32_Process where ProcessId=" . pid
+        for process in ComObjGet("winmgmts:").ExecQuery(query) {
+            processName := StrLower(process.Name . "")
+            commandLine := StrLower(process.CommandLine . "")
+            return processName = "node.exe" && InStr(commandLine, StrLower(SERVER_SCRIPT))
+        }
+    } catch as err {
+        LogMessage("WARNING: Failed to verify owned server PID " . pid . ": " . err.Message)
+    }
+    return false
+}
+
+UpdateTrayStatus(status) {
+    global trayStatusLabel, bridgeStatus
+    bridgeStatus := status
+    newLabel := "Status: " . status
+
+    if (trayStatusLabel != newLabel) {
+        try {
+            A_TrayMenu.Rename(trayStatusLabel, newLabel)
+            trayStatusLabel := newLabel
+            A_TrayMenu.Disable(trayStatusLabel)
+        } catch {
+            ; The menu may not be initialized yet.
+        }
+    }
+    A_IconTip := "YouTube Dictation Control`nBridge: " . status
+}
+
+StartOwnedServer() {
+    global SERVER_SCRIPT, APP_ROOT, ownedServerPid, lastServerStartTick
+    global consecutiveHealthFailures
+
+    if (IsCompatibleBridgeHealthy()) {
+        consecutiveHealthFailures := 0
+        UpdateTrayStatus(ownedServerPid ? "running" : "running (existing bridge)")
+        return true
+    }
+
+    if (!FileExist(SERVER_SCRIPT)) {
+        LogMessage("ERROR: Node server script not found: " . SERVER_SCRIPT)
+        UpdateTrayStatus("server files missing")
+        return false
+    }
+
+    nodeExe := ResolveNodeExecutable()
+    if (nodeExe = "") {
+        LogMessage("ERROR: Node.js 22 or later was not found.")
+        UpdateTrayStatus("Node.js missing")
+        return false
+    }
+
+    serverPid := 0
+    lastServerStartTick := A_TickCount
+    try {
+        Run('"' . nodeExe . '" "' . SERVER_SCRIPT . '"', APP_ROOT . "\server", "Hide", &serverPid)
+    } catch as err {
+        LogMessage("ERROR: Failed to start local bridge: " . err.Message)
+        UpdateTrayStatus("start failed")
+        return false
+    }
+
+    if (!serverPid) {
+        LogMessage("ERROR: Node.js started without a trackable PID.")
+        UpdateTrayStatus("start failed")
+        return false
+    }
+
+    ownedServerPid := serverPid
+    LogMessage("Started owned Node bridge PID " . ownedServerPid . " with hidden window.")
+    UpdateTrayStatus("starting")
+
+    Loop 10 {
+        Sleep(250)
+        if (IsCompatibleBridgeHealthy()) {
+            consecutiveHealthFailures := 0
+            UpdateTrayStatus("running")
+            return true
+        }
+        if (!ProcessExist(ownedServerPid)) {
+            break
+        }
+    }
+
+    LogMessage("WARNING: Owned Node bridge did not become healthy after startup.")
+    UpdateTrayStatus("unhealthy")
+    return false
+}
+
+StopOwnedServer() {
+    global ownedServerPid
+    if (!ownedServerPid) {
+        return true
+    }
+
+    pidToStop := ownedServerPid
+    if (!IsOwnedServerProcess(ownedServerPid)) {
+        LogMessage("WARNING: Refused to stop PID " . ownedServerPid . " because ownership verification failed.")
+        ownedServerPid := 0
+        return false
+    }
+
+    try {
+        ProcessClose(ownedServerPid)
+        try {
+            ProcessWaitClose(ownedServerPid, 3)
+        } catch {
+            ; ProcessClose may complete before ProcessWaitClose starts.
+        }
+        LogMessage("Stopped owned Node bridge PID " . pidToStop . ".")
+        ownedServerPid := 0
+        return true
+    } catch as err {
+        LogMessage("WARNING: Failed to stop owned Node bridge PID " . pidToStop . ": " . err.Message)
+        return false
+    }
+}
+
+RestartOwnedServer(*) {
+    global ownedServerPid
+    if (!ownedServerPid && IsCompatibleBridgeHealthy()) {
+        LogMessage("Restart requested, but the healthy bridge is not owned by this controller.")
+        MsgBox("The running local bridge was started by another instance, so it was not stopped.", "YouTube Dictation Control", "Iconi")
+        return
+    }
+
+    UpdateTrayStatus("restarting")
+    StopOwnedServer()
+    Sleep(300)
+    StartOwnedServer()
+}
+
+CheckAndStartServer() {
+    global AUTO_START_SERVER
+    if (IsCompatibleBridgeHealthy()) {
+        LogMessage("Compatible local bridge already running.")
+        UpdateTrayStatus("running (existing bridge)")
+        return true
+    }
+
+    if (!AUTO_START_SERVER) {
+        LogMessage("WARNING: Local bridge is stopped and autoStartServer is false.")
+        UpdateTrayStatus("stopped")
+        return false
+    }
+
+    return StartOwnedServer()
+}
+
+MonitorServerHealth() {
+    global ownedServerPid, consecutiveHealthFailures, HEALTH_FAILURE_THRESHOLD
+    global AUTO_START_SERVER, lastServerStartTick, SERVER_RESTART_MIN_INTERVAL_MS
+
+    if (IsCompatibleBridgeHealthy()) {
+        consecutiveHealthFailures := 0
+        UpdateTrayStatus(ownedServerPid ? "running" : "running (existing bridge)")
+        return
+    }
+
+    if (ownedServerPid && !ProcessExist(ownedServerPid)) {
+        LogMessage("Owned Node bridge PID " . ownedServerPid . " exited.")
+        ownedServerPid := 0
+    }
+
+    consecutiveHealthFailures += 1
+    UpdateTrayStatus("unhealthy")
+
+    if (AUTO_START_SERVER
+        && consecutiveHealthFailures >= HEALTH_FAILURE_THRESHOLD
+        && A_TickCount - lastServerStartTick >= SERVER_RESTART_MIN_INTERVAL_MS) {
+        LogMessage("Health monitor is restarting the local bridge after " . consecutiveHealthFailures . " failures.")
+        if (ownedServerPid) {
+            StopOwnedServer()
+        }
+        StartOwnedServer()
+    }
+}
+
+GetStartupShortcutPath() {
+    global STARTUP_SHORTCUT_NAME
+    return A_Startup . "\" . STARTUP_SHORTCUT_NAME
+}
+
+IsStartupRegistered() {
+    return FileExist(GetStartupShortcutPath())
+}
+
+UpdateStartupMenuCheck() {
+    try {
+        if (IsStartupRegistered()) {
+            A_TrayMenu.Check("Start with Windows")
+        } else {
+            A_TrayMenu.Uncheck("Start with Windows")
+        }
+    }
+}
+
+ToggleStartupRegistration(*) {
+    global APP_ROOT
+    shortcutPath := GetStartupShortcutPath()
+
+    if (!A_IsCompiled) {
+        MsgBox("Startup registration from the tray is available in the compiled release. Use scripts\windows\setup-autostart.bat in source mode.", "YouTube Dictation Control", "Iconi")
+        return
+    }
+
+    try {
+        if (FileExist(shortcutPath)) {
+            FileDelete(shortcutPath)
+            LogMessage("Removed Windows startup shortcut.")
+        } else {
+            shell := ComObject("WScript.Shell")
+            shortcut := shell.CreateShortcut(shortcutPath)
+            shortcut.TargetPath := A_ScriptFullPath
+            shortcut.WorkingDirectory := APP_ROOT
+            shortcut.Description := "Start YouTube Dictation Control in the notification area"
+            shortcut.IconLocation := A_ScriptFullPath . ",0"
+            shortcut.Save()
+            LogMessage("Created Windows startup shortcut.")
+        }
+        UpdateStartupMenuCheck()
+    } catch as err {
+        LogMessage("ERROR: Failed to update startup shortcut: " . err.Message)
+        MsgBox("Could not update Windows startup registration. See logs\control.log.", "YouTube Dictation Control", "Iconx")
+    }
+}
+
+OpenLog(*) {
+    global LOG_FILE
+    try {
+        if (!FileExist(LOG_FILE)) {
+            LogMessage("Log opened from tray.")
+        }
+        Run('notepad.exe "' . LOG_FILE . '"')
+    } catch as err {
+        MsgBox("Could not open the log file: " . err.Message, "YouTube Dictation Control", "Iconx")
+    }
+}
+
+ExitApplication(*) {
+    ExitApp()
+}
+
+ConfigureTrayMenu() {
+    global trayStatusLabel
+    A_TrayMenu.Delete()
+    trayStatusLabel := "Status: starting"
+    A_TrayMenu.Add(trayStatusLabel, (*) => 0)
+    A_TrayMenu.Disable(trayStatusLabel)
+    A_TrayMenu.Add()
+    A_TrayMenu.Add("Restart local bridge", RestartOwnedServer)
+    A_TrayMenu.Add("Reset dictation state", ResetDictationState)
+    A_TrayMenu.Add("Open log", OpenLog)
+    A_TrayMenu.Add()
+    A_TrayMenu.Add("Start with Windows", ToggleStartupRegistration)
+    A_TrayMenu.Add()
+    A_TrayMenu.Add("Exit", ExitApplication)
+    UpdateStartupMenuCheck()
+    UpdateTrayStatus("starting")
+}
+
+SendStateToServer(activeVal) {
+    global PORT
+    url := "http://127.0.0.1:" . PORT . "/state"
+    body := '{"active": ' . (activeVal ? "true" : "false") . ', "source": "ahk"}'
+
+    LogMessage("POST /state sending: " . (activeVal ? "active=true" : "active=false"))
+
+    try {
+        whr := ComObject("WinHttp.WinHttpRequest.5.1")
+        whr.SetTimeouts(500, 500, 2000, 2000)
+        whr.Open("POST", url, false)
+        whr.SetRequestHeader("Content-Type", "application/json")
+        whr.Send(body)
+        if (whr.Status = 200) {
+            LogMessage("POST /state succeeded")
+            return true
+        }
+        LogMessage("POST /state failed. HTTP Status: " . whr.Status)
+    } catch as err {
+        LogMessage("POST /state failed. Error: " . err.Message)
+    }
+    return false
+}
+
 UpdateDictationStatus() {
     global isTypelessActive, isWisprFlowActive, anyDictationActive
-    
+    global DEBUG_MODE, TYPELESS_HOTKEY_RAW, WISPR_FLOW_HOTKEY_RAW
+
     currentActiveState := isTypelessActive || isWisprFlowActive
-    
+
     if (DEBUG_MODE) {
         statusText := "--- Dictation Status ---`n"
         statusText .= "Typeless (" . TYPELESS_HOTKEY_RAW . "): " . (isTypelessActive ? "ACTIVE" : "inactive") . "`n"
@@ -249,7 +510,7 @@ UpdateDictationStatus() {
         ToolTip(statusText)
         SetTimer(() => ToolTip(), -3000)
     }
-    
+
     if (currentActiveState && !anyDictationActive) {
         anyDictationActive := true
         LogMessage("state changed: inactive -> active")
@@ -280,11 +541,6 @@ ResetDictationState(*) {
     }
 }
 
-; ==============================================================================
-; ホットキーイベントハンドラ
-; ==============================================================================
-
-; --- Typeless の処理 ---
 TriggerTypeless() {
     global isTypelessActive, lastTypelessTick, DEBOUNCE_MS
     currentTick := A_TickCount
@@ -313,7 +569,6 @@ HandleTypelessKey(*) {
     UpdateDictationStatus()
 }
 
-; --- Wispr Flow の処理 ---
 HandleWisprFlowKey(*) {
     global isWisprFlowActive, lastWisprFlowTick, DEBOUNCE_MS
     currentTick := A_TickCount
@@ -328,18 +583,19 @@ HandleWisprFlowKey(*) {
     UpdateDictationStatus()
 }
 
-; --- スクリプト初期設定・開始 ---
+HandleAppExit(exitReason, exitCode) {
+    StopOwnedServer()
+    DeletePidFile(exitReason, exitCode)
+}
+
 WritePidFile()
-OnExit(DeletePidFile)
-LogMessage("AHK script started.")
-
-; 1. 設定読み込み
+OnExit(HandleAppExit)
+LogMessage("Controller started. Compiled=" . (A_IsCompiled ? "true" : "false"))
 ReadSettings()
-
-; 2. サーバー生存確認と自動起動
+ConfigureTrayMenu()
 CheckAndStartServer()
+SetTimer(MonitorServerHealth, HEALTH_CHECK_INTERVAL_MS)
 
-; 3. 状態リセットホットキーの登録
 parsedResetKey := ParseHotkey(RESET_HOTKEY_RAW)
 try {
     Hotkey(parsedResetKey, ResetDictationState)
@@ -348,9 +604,7 @@ try {
     LogMessage("ERROR: Failed to register reset hotkey " . parsedResetKey . ": " . err.Message)
 }
 
-; 4. Wispr Flow ホットキーの登録
 parsedWisprKey := ParseHotkey(WISPR_FLOW_HOTKEY_RAW)
-; 音声入力アプリにキーを通すため pass-through プレフィックス "~" を付与します
 passThroughWisprKey := "~" . parsedWisprKey
 try {
     Hotkey(passThroughWisprKey, HandleWisprFlowKey)
@@ -359,10 +613,7 @@ try {
     LogMessage("ERROR: Failed to register Wispr Flow hotkey " . passThroughWisprKey . ": " . err.Message)
 }
 
-; 5. Typeless ホットキーの登録
 if (TYPELESS_HOTKEY_RAW = "Ctrl+Shift") {
-    ; デフォルトの Ctrl+Shift は修飾キー単体のため、LControl/LShiftのリリースフックを使用します。
-    ; ~ (pass-through) が付いているため、元のOSやTypelessの挙動を全く阻害しません。
     ~LControl Up:: {
         if (TYPELESS_HOTKEY_RAW = "Ctrl+Shift") {
             if (A_PriorKey = "LShift" || A_PriorKey = "RShift") {
@@ -391,6 +642,6 @@ if (TYPELESS_HOTKEY_RAW = "Ctrl+Shift") {
 }
 
 if (DEBUG_MODE) {
-    ToolTip("YouTube Dictation Control Started`nDebug Mode: ON`n(HTTP Bridge Mode)")
+    ToolTip("YouTube Dictation Control Started`nDebug Mode: ON")
     SetTimer(() => ToolTip(), -3000)
 }
