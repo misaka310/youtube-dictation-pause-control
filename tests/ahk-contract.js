@@ -61,6 +61,67 @@ test('AHK log writes retry transient file locks', () => {
   assert.match(ahk, /Sleep\(/);
 });
 
+test('AHK resolves one application root for interpreted and compiled modes', () => {
+  assert.match(ahk, /GetParentDirectory\(path\)/);
+  assert.match(ahk, /global\s+APP_ROOT\s*:=\s*A_IsCompiled\s*\?\s*A_ScriptDir\s*:\s*GetParentDirectory\(A_ScriptDir\)/);
+  assert.match(ahk, /global\s+SERVER_SCRIPT\s*:=\s*APP_ROOT\s*\.\s*"\\server\\server\.js"/);
+  assert.match(ahk, /global\s+LOG_FILE\s*:=\s*APP_ROOT\s*\.\s*"\\logs\\control\.log"/);
+});
+
+test('AHK owns a custom notification-area menu', () => {
+  assert.match(ahk, /ConfigureTrayMenu\(\)/);
+  assert.match(ahk, /A_TrayMenu\.Delete\(\)/);
+  assert.match(ahk, /Status:/);
+  assert.match(ahk, /Restart local bridge/);
+  assert.match(ahk, /Reset dictation state/);
+  assert.match(ahk, /Open log/);
+  assert.match(ahk, /Start with Windows/);
+  assert.match(ahk, /A_TrayMenu\.Add\("Exit"/);
+});
+
+test('AHK launches Node directly and hidden instead of opening a terminal', () => {
+  const startFunction = ahk.match(/StartOwnedServer\([^)]*\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(startFunction, 'StartOwnedServer function must exist');
+  assert.match(startFunction[1], /ResolveNodeExecutable\(\)/);
+  assert.match(startFunction[1], /Run\([^\n]+SERVER_SCRIPT[^\n]+"Hide"[^\n]+&serverPid\)/);
+  assert.doesNotMatch(startFunction[1], /cmd\.exe|wt\.exe|start-server\.bat/i);
+});
+
+test('AHK monitors bridge health with failure debounce and restart throttling', () => {
+  assert.match(ahk, /global\s+HEALTH_CHECK_INTERVAL_MS\s*:=\s*5000/);
+  assert.match(ahk, /global\s+HEALTH_FAILURE_THRESHOLD\s*:=\s*2/);
+  assert.match(ahk, /MonitorServerHealth\(\)/);
+  assert.match(ahk, /SetTimer\(MonitorServerHealth,\s*HEALTH_CHECK_INTERVAL_MS\)/);
+  assert.match(ahk, /consecutiveHealthFailures\s*>=\s*HEALTH_FAILURE_THRESHOLD/);
+  assert.match(ahk, /lastServerStartTick/);
+  assert.match(ahk, /if\s*\(ownedServerPid\)\s*\{\s*StopOwnedServer\(\)/);
+});
+
+test('AHK stops only a verified server process it owns', () => {
+  assert.match(ahk, /global\s+ownedServerPid\s*:=\s*0/);
+  assert.match(ahk, /IsOwnedServerProcess\(pid\)/);
+  const stopFunction = ahk.match(/StopOwnedServer\([^)]*\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(stopFunction, 'StopOwnedServer function must exist');
+  assert.match(stopFunction[1], /IsOwnedServerProcess\(ownedServerPid\)/);
+  assert.match(stopFunction[1], /ProcessClose\(ownedServerPid\)/);
+});
+
+test('AHK exit cleanup removes its PID and stops only its owned bridge', () => {
+  assert.match(ahk, /HandleAppExit\(exitReason,\s*exitCode\)/);
+  assert.match(ahk, /OnExit\(HandleAppExit\)/);
+  const exitFunction = ahk.match(/HandleAppExit\([^)]*\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(exitFunction, 'HandleAppExit function must exist');
+  assert.match(exitFunction[1], /DeletePidFile/);
+  assert.match(exitFunction[1], /StopOwnedServer/);
+});
+
+test('AHK startup shortcut targets the compiled executable', () => {
+  assert.match(ahk, /GetStartupShortcutPath\(\)/);
+  assert.match(ahk, /ToggleStartupRegistration\(/);
+  assert.match(ahk, /A_IsCompiled/);
+  assert.match(ahk, /CreateShortcut/);
+});
+
 test('process cleanup supports an AHK-only mode', () => {
   assert.match(stopScript, /param\s*\(\s*\[switch\]\$AhkOnly\s*\)/i);
   assert.match(stopScript, /if\s*\(-not\s+\$AhkOnly\)/i);
@@ -74,29 +135,26 @@ test('a stale server PID triggers verified-port fallback and failed stops propag
   assert.match(stopScript, /throw "Failed to stop \$failedCount verified Node server process\(es\)\."/);
 });
 
-test('process cleanup finds orphaned instances and verifies termination', () => {
+test('process cleanup finds orphaned source and compiled controller instances', () => {
   assert.match(stopScript, /Get-CimInstance\s+Win32_Process/i);
   assert.match(stopScript, /youtube-dictation-control\.ahk/i);
+  assert.match(stopScript, /YouTubeDictationControl\.exe/i);
+  assert.match(stopScript, /\$controllerScriptPath/);
+  assert.match(stopScript, /ExpectedCommandLineFragments\s+@\(\$controllerScriptPath\)/);
+  assert.match(stopScript, /ExpectedExecutablePaths\s+@\(\$controllerExePath\)/);
   assert.match(stopScript, /function\s+Stop-VerifiedProcess/i);
   assert.match(stopScript, /Get-Process\s+-Id\s+\$ProcessId/i);
   assert.match(stopScript, /Stop-VerifiedProcess\s+-ProcessId\s+\$process\.ProcessId/i);
-  assert.match(stopScript, /throw "AutoHotkey fallback scan failed:/i);
 });
 
-test('manual startup removes prior matching AHK instances before launch', () => {
-  const cleanupIndex = startScript.indexOf('-AhkOnly');
-  const launchIndex = startScript.indexOf('start "" "%AHK_EXE%" "ahk\\youtube-dictation-control.ahk"');
-  assert.ok(cleanupIndex >= 0, 'start.bat must invoke AHK-only cleanup');
-  assert.ok(launchIndex >= 0, 'start.bat must launch the AHK script');
-  assert.ok(cleanupIndex < launchIndex, 'cleanup must run before the AHK launch');
+test('manual startup prefers the compiled controller and keeps source fallback', () => {
+  assert.match(startScript, /YouTubeDictationControl\.exe/i);
+  assert.match(startScript, /youtube-dictation-control\.ahk/i);
 });
 
-test('background startup removes prior matching AHK instances before launch', () => {
-  const cleanupIndex = backgroundStartScript.indexOf('-AhkOnly');
-  const launchIndex = backgroundStartScript.indexOf('start "" "%AHK_EXE%" "ahk\\youtube-dictation-control.ahk"');
-  assert.ok(cleanupIndex >= 0, 'start-background.bat must invoke AHK-only cleanup');
-  assert.ok(launchIndex >= 0, 'start-background.bat must launch the AHK script');
-  assert.ok(cleanupIndex < launchIndex, 'cleanup must run before the AHK launch');
+test('background startup prefers the compiled controller and keeps source fallback', () => {
+  assert.match(backgroundStartScript, /YouTubeDictationControl\.exe/i);
+  assert.match(backgroundStartScript, /youtube-dictation-control\.ahk/i);
 });
 
 console.log(`AHK contract tests passed: ${caseCount} cases`);
