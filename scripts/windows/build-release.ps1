@@ -16,7 +16,7 @@ $AutoHotkeyArchiveSha256 = '43522AA3122A57784AC5DB30ABF85C2244475C36ACD7796E2C99
 $Ahk2ExeArchiveSha256 = 'C29B8C3A5124850D79FC9E66E2CA79677C377D7F31631AD3022BA159C5D9E3BE'
 $AutoHotkeySourceSha256 = '765ADA5AE0A543F470BCD30371A7B95438E59351B0A20508C516DF76A4F73CA4'
 
-$AutoHotkeyArchiveUrl = "https://www.autohotkey.com/download/2.0/AutoHotkey_$AutoHotkeyVersion.zip"
+$AutoHotkeyArchiveUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$AutoHotkeyVersion/AutoHotkey_$AutoHotkeyVersion.zip"
 $Ahk2ExeArchiveUrl = "https://github.com/AutoHotkey/Ahk2Exe/releases/download/Ahk2Exe$Ahk2ExeVersion/Ahk2Exe$Ahk2ExeVersion.zip"
 $AutoHotkeySourceUrl = "https://github.com/AutoHotkey/AutoHotkey/archive/refs/tags/v$AutoHotkeyVersion.zip"
 

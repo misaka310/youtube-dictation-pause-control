@@ -28,6 +28,8 @@ const ci = fs.readFileSync(ciPath, 'utf8');
 assert.match(buildScript, /\$AutoHotkeyVersion\s*=\s*'2\.0\.\d+'/);
 assert.match(buildScript, /\$Ahk2ExeVersion\s*=\s*'[^']+'/);
 assert.match(buildScript, /\$AutoHotkeyArchiveSha256\s*=\s*'[A-Fa-f0-9]{64}'/);
+assert.match(buildScript, /github\.com\/AutoHotkey\/AutoHotkey\/releases\/download\/v\$AutoHotkeyVersion\/AutoHotkey_\$AutoHotkeyVersion\.zip/);
+assert.doesNotMatch(buildScript, /www\.autohotkey\.com\/download/);
 assert.match(buildScript, /\$Ahk2ExeArchiveSha256\s*=\s*'[A-Fa-f0-9]{64}'/);
 assert.match(buildScript, /\$AutoHotkeySourceSha256\s*=\s*'[A-Fa-f0-9]{64}'/);
 assert.match(buildScript, /Get-FileHash\s+-Algorithm\s+SHA256/i);
