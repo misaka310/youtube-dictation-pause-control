@@ -31,6 +31,7 @@ global isWisprFlowActive := false
 global anyDictationActive := false
 global lastTypelessTick := 0
 global lastWisprFlowTick := 0
+global typelessChordArmed := false
 global DEBOUNCE_MS := 400
 
 global HEALTH_CHECK_INTERVAL_MS := 5000
@@ -524,13 +525,14 @@ UpdateDictationStatus() {
 
 ResetDictationState(*) {
     global isTypelessActive, isWisprFlowActive, anyDictationActive
-    global lastTypelessTick, lastWisprFlowTick, DEBUG_MODE
+    global lastTypelessTick, lastWisprFlowTick, typelessChordArmed, DEBUG_MODE
 
     isTypelessActive := false
     isWisprFlowActive := false
     anyDictationActive := false
     lastTypelessTick := 0
     lastWisprFlowTick := 0
+    typelessChordArmed := false
 
     LogMessage("manual state reset: all dictation states -> inactive")
     SendStateToServer(false)
@@ -553,6 +555,36 @@ TriggerTypeless() {
     isTypelessActive := !isTypelessActive
     LogMessage("hotkey triggered (Typeless). State: " . (isTypelessActive ? "ACTIVE" : "inactive"))
     UpdateDictationStatus()
+}
+
+HandleTypelessModifierDown(*) {
+    global TYPELESS_HOTKEY_RAW, typelessChordArmed
+
+    if (TYPELESS_HOTKEY_RAW != "Ctrl+Shift" || typelessChordArmed) {
+        return
+    }
+
+    if (GetKeyState("Ctrl", "P") && GetKeyState("Shift", "P")) {
+        typelessChordArmed := true
+        TriggerTypeless()
+    }
+}
+
+HandleTypelessModifierUp(*) {
+    global typelessChordArmed
+
+    if (!GetKeyState("Ctrl", "P") || !GetKeyState("Shift", "P")) {
+        typelessChordArmed := false
+    }
+}
+
+RegisterTypelessModifierHooks() {
+    for keyName in ["LControl", "RControl", "LShift", "RShift"] {
+        Hotkey("~*" . keyName, HandleTypelessModifierDown)
+        Hotkey("~*" . keyName . " Up", HandleTypelessModifierUp)
+    }
+
+    LogMessage("Registered Typeless physical modifier hooks: Ctrl+Shift")
 }
 
 HandleTypelessKey(*) {
@@ -614,22 +646,7 @@ try {
 }
 
 if (TYPELESS_HOTKEY_RAW = "Ctrl+Shift") {
-    ~LControl Up:: {
-        if (TYPELESS_HOTKEY_RAW = "Ctrl+Shift") {
-            if (A_PriorKey = "LShift" || A_PriorKey = "RShift") {
-                TriggerTypeless()
-            }
-        }
-    }
-
-    ~LShift Up:: {
-        if (TYPELESS_HOTKEY_RAW = "Ctrl+Shift") {
-            if (A_PriorKey = "LControl" || A_PriorKey = "RControl") {
-                TriggerTypeless()
-            }
-        }
-    }
-    LogMessage("Registered Typeless modifier hook: Ctrl+Shift")
+    RegisterTypelessModifierHooks()
 } else {
     parsedTypelessKey := ParseHotkey(TYPELESS_HOTKEY_RAW)
     passThroughTypelessKey := "~" . parsedTypelessKey

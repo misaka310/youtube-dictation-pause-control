@@ -54,6 +54,18 @@ test('AHK registers the configured reset hotkey', () => {
   assert.match(ahk, /Hotkey\(parsedResetKey,\s*ResetDictationState\)/);
 });
 
+test('Typeless modifier chord tracks physical Ctrl and Shift on both sides', () => {
+  assert.match(ahk, /global\s+typelessChordArmed\s*:=\s*false/);
+  assert.match(ahk, /HandleTypelessModifierDown\([^)]*\)/);
+  assert.match(ahk, /GetKeyState\("Ctrl",\s*"P"\)/);
+  assert.match(ahk, /GetKeyState\("Shift",\s*"P"\)/);
+  assert.match(ahk, /RegisterTypelessModifierHooks\(\)/);
+  for (const key of ['LControl', 'RControl', 'LShift', 'RShift']) {
+    assert.ok(ahk.includes(`"${key}"`), `Typeless chord must register ${key}`);
+  }
+  assert.doesNotMatch(ahk, /A_PriorKey/);
+});
+
 test('AHK log writes retry transient file locks', () => {
   assert.match(ahk, /AppendLogWithRetry\(logFile,\s*logLine\)/);
   assert.match(ahk, /Loop\s+\d+/);
