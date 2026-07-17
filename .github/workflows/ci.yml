@@ -16,3 +16,6 @@ jobs:
         run: npm run check
       - name: Run all tests
         run: npm test
+      - name: Build self-contained Windows package
+        shell: powershell
+        run: ./scripts/windows/build-release.ps1
