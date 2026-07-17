@@ -19,7 +19,7 @@ global STARTUP_SHORTCUT_NAME := "YouTube Dictation Pause Control.lnk"
 SetWorkingDir(APP_ROOT)
 
 global PORT := 17654
-global TYPELESS_HOTKEY_RAW := "Ctrl+Shift"
+global TYPELESS_HOTKEY_RAW := "RightCtrl+RightShift"
 global WISPR_FLOW_HOTKEY_RAW := "Ctrl+]"
 global RESET_HOTKEY_RAW := "Ctrl+Alt+R"
 global AUTO_START_SERVER := true
@@ -122,7 +122,7 @@ ReadSettings() {
                 PORT := Integer(match[1])
             }
             if (RegExMatch(content, '"typelessHotkey"\s*:\s*"([^"]+)"', &match)) {
-                TYPELESS_HOTKEY_RAW := match[1]
+                TYPELESS_HOTKEY_RAW := (match[1] = "Ctrl+Shift") ? "RightCtrl+RightShift" : match[1]
             }
             if (RegExMatch(content, '"wisprFlowHotkey"\s*:\s*"([^"]+)"', &match)) {
                 WISPR_FLOW_HOTKEY_RAW := match[1]
@@ -149,8 +149,8 @@ ReadSettings() {
 }
 
 ParseHotkey(keyStr) {
-    if (keyStr = "Ctrl+Shift") {
-        return "Ctrl+Shift"
+    if (keyStr = "RightCtrl+RightShift") {
+        return "RightCtrl+RightShift"
     }
 
     res := keyStr
@@ -560,11 +560,11 @@ TriggerTypeless() {
 HandleTypelessModifierDown(*) {
     global TYPELESS_HOTKEY_RAW, typelessChordArmed
 
-    if (TYPELESS_HOTKEY_RAW != "Ctrl+Shift" || typelessChordArmed) {
+    if (TYPELESS_HOTKEY_RAW != "RightCtrl+RightShift" || typelessChordArmed) {
         return
     }
 
-    if (GetKeyState("Ctrl", "P") && GetKeyState("Shift", "P")) {
+    if (GetKeyState("RControl", "P") && GetKeyState("RShift", "P")) {
         typelessChordArmed := true
         TriggerTypeless()
     }
@@ -573,18 +573,18 @@ HandleTypelessModifierDown(*) {
 HandleTypelessModifierUp(*) {
     global typelessChordArmed
 
-    if (!GetKeyState("Ctrl", "P") || !GetKeyState("Shift", "P")) {
+    if (!GetKeyState("RControl", "P") || !GetKeyState("RShift", "P")) {
         typelessChordArmed := false
     }
 }
 
 RegisterTypelessModifierHooks() {
-    for keyName in ["LControl", "RControl", "LShift", "RShift"] {
+    for keyName in ["RControl", "RShift"] {
         Hotkey("~*" . keyName, HandleTypelessModifierDown)
         Hotkey("~*" . keyName . " Up", HandleTypelessModifierUp)
     }
 
-    LogMessage("Registered Typeless physical modifier hooks: Ctrl+Shift")
+    LogMessage("Registered Typeless physical modifier hooks: RightCtrl+RightShift")
 }
 
 HandleTypelessKey(*) {
@@ -645,7 +645,7 @@ try {
     LogMessage("ERROR: Failed to register Wispr Flow hotkey " . passThroughWisprKey . ": " . err.Message)
 }
 
-if (TYPELESS_HOTKEY_RAW = "Ctrl+Shift") {
+if (TYPELESS_HOTKEY_RAW = "RightCtrl+RightShift") {
     RegisterTypelessModifierHooks()
 } else {
     parsedTypelessKey := ParseHotkey(TYPELESS_HOTKEY_RAW)

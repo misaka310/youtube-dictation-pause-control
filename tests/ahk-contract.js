@@ -25,6 +25,12 @@ test('default settings expose a dedicated reset hotkey', () => {
   assert.strictEqual(settings.resetHotkey, 'Ctrl+Alt+R');
 });
 
+test('default settings use only right-side Typeless modifiers', () => {
+  assert.strictEqual(settings.typelessHotkey, 'RightCtrl+RightShift');
+  assert.match(ahk, /global\s+TYPELESS_HOTKEY_RAW\s*:=\s*"RightCtrl\+RightShift"/);
+  assert.match(ahk, /match\[1\]\s*=\s*"Ctrl\+Shift"[^\n]+"RightCtrl\+RightShift"/);
+});
+
 test('AHK reads resetHotkey from settings.json', () => {
   assert.match(ahk, /global\s+RESET_HOTKEY_RAW\s*:=\s*"Ctrl\+Alt\+R"/);
   assert.match(ahk, /"resetHotkey"/);
@@ -54,15 +60,14 @@ test('AHK registers the configured reset hotkey', () => {
   assert.match(ahk, /Hotkey\(parsedResetKey,\s*ResetDictationState\)/);
 });
 
-test('Typeless modifier chord tracks physical Ctrl and Shift on both sides', () => {
+test('Typeless modifier chord uses only physical Right Ctrl and Right Shift', () => {
   assert.match(ahk, /global\s+typelessChordArmed\s*:=\s*false/);
   assert.match(ahk, /HandleTypelessModifierDown\([^)]*\)/);
-  assert.match(ahk, /GetKeyState\("Ctrl",\s*"P"\)/);
-  assert.match(ahk, /GetKeyState\("Shift",\s*"P"\)/);
+  assert.match(ahk, /GetKeyState\("RControl",\s*"P"\)/);
+  assert.match(ahk, /GetKeyState\("RShift",\s*"P"\)/);
   assert.match(ahk, /RegisterTypelessModifierHooks\(\)/);
-  for (const key of ['LControl', 'RControl', 'LShift', 'RShift']) {
-    assert.ok(ahk.includes(`"${key}"`), `Typeless chord must register ${key}`);
-  }
+  assert.match(ahk, /for\s+keyName\s+in\s+\["RControl",\s*"RShift"\]/);
+  assert.doesNotMatch(ahk, /\["LControl",\s*"RControl",\s*"LShift",\s*"RShift"\]/);
   assert.doesNotMatch(ahk, /A_PriorKey/);
 });
 

@@ -72,13 +72,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 
 **前提条件**
 - YouTube動画が再生中。
-- Typelessのホットキーが`Ctrl + Shift`。
+- Typelessのホットキーが`右Ctrl + 右Shift`。
 - Wispr Flowは停止中。
 
 **操作手順**
-1. `Ctrl + Shift`を押して離し、Typelessを開始する。
+1. `右Ctrl + 右Shift`を押して離し、Typelessを開始する。
 2. 動画停止を確認する。
-3. 400ms以上待ち、同じ操作で終了する。
+3. `左Ctrl + 左Shift`を押しても動画状態が変わらないことを確認する。
+4. 400ms以上待ち、`右Ctrl + 右Shift`で終了する。
 
 **期待結果**
 - 開始時に停止し、終了時に同一sessionで所有している動画だけ再生する。
@@ -88,7 +89,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 - Content Script: `[EXT] paused by script sessionId=...`、`[EXT] resumed by script sessionId=...`
 
 **失敗時の切り分け**
-- `Ctrl + Shift`が他アプリ操作としてしか反応しない場合、AHKの`Registered Typeless modifier hook`を確認。
+- `右Ctrl + 右Shift`が他アプリ操作としてしか反応しない場合、AHKの`Registered Typeless physical modifier hooks`を確認。
 - HTTP / 拡張機能の切り分けはケース1と同じ。
 
 **復旧方法**

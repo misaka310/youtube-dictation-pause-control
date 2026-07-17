@@ -1,7 +1,7 @@
 {
   "port": 17654,
   "pollingIntervalMs": 500,
-  "typelessHotkey": "Ctrl+Shift",
+  "typelessHotkey": "RightCtrl+RightShift",
   "wisprFlowHotkey": "Ctrl+]",
   "resetHotkey": "Ctrl+Alt+R",
   "autoStartServer": true,
