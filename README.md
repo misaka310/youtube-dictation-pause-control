@@ -1,6 +1,7 @@
 # YouTube Dictation Pause Control
 
 [![CI](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/misaka310/youtube-dictation-pause-control)](https://github.com/misaka310/youtube-dictation-pause-control/releases/latest)
 
 Windowsで音声入力中だけYouTubeを自動一時停止するローカル補助ツールです。Typeless または Wispr Flow のホットキーを通知領域常駐EXEで検知し、BraveのYouTubeタブだけを拡張機能から制御します。
 
@@ -58,7 +59,9 @@ YouTubeDictationPauseControl-<version>/
 
 ### 1. 配布ZIPを用意して展開する
 
-Windows x64向け配布ZIPが公開されている場合は、書き込み可能な任意のフォルダへ展開します。配布ZIPがない版は、リポジトリを取得して次を実行すると`dist/`に同じ形式のZIPを生成できます。AutoHotkeyの別インストールは不要です。
+[Latest Release](https://github.com/misaka310/youtube-dictation-pause-control/releases/latest)から`YouTubeDictationPauseControl-<version>-windows-x64.zip`を取得し、書き込み可能な任意のフォルダへ展開します。各ReleaseにはZIPと、その検証用`SHA256SUMS.txt`が添付されます。AutoHotkeyの別インストールは不要です。
+
+配布ZIPを自分で生成する場合は、リポジトリを取得して次を実行します。
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\build-release.ps1
@@ -190,13 +193,26 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\build-re
 生成物の実機検証:
 
 ```powershell
+$version = (Get-Content -Raw package.json | ConvertFrom-Json).version
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-release-runtime.ps1 `
-  -PackageDirectory dist\YouTubeDictationPauseControl-1.2.0
+  -PackageDirectory "dist\YouTubeDictationPauseControl-$version"
 ```
 
 この検証は、EXE起動、ローカルBridgeの健康状態、親子プロセス所有権、Node強制終了後の別PID復旧、通常終了時のOwned Bridge停止を確認します。
 
-GitHub ActionsはWindowsとNode.js 22で`npm test`をpushとpull requestごとに実行します。実際のYouTube画面と音声入力アプリを使う確認は[`docs/e2e-checklist.md`](docs/e2e-checklist.md)で行います。
+通常のGitHub Actions CIは、ブランチへのpushとpull requestごとにWindows／Node.js 22で`npm test`と配布ZIPのビルド確認を実行します。実際のYouTube画面と音声入力アプリを使う確認は[`docs/e2e-checklist.md`](docs/e2e-checklist.md)で行います。
+
+## GitHub Releaseの自動公開
+
+`package.json`のバージョンと同じ`vX.Y.Z`タグをpushすると、専用のRelease workflowが次を自動実行します。
+
+1. タグと`package.json`のバージョン一致を検証
+2. 全テストを実行
+3. 自己完結EXEを含むWindows x64 ZIPを生成
+4. ZIPの`SHA256SUMS.txt`を生成
+5. GitHub Releaseを作成し、ZIPとチェックサムを添付
+
+同じタグのworkflowを再実行した場合は、既存Releaseの添付ファイルを`--clobber`で置き換えます。保守者向けの手順は[`docs/releasing.md`](docs/releasing.md)を参照してください。
 
 ## プライバシーとセキュリティ
 
