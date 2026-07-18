@@ -3,6 +3,7 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const packageJson = require('../package.json');
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = 22000 + Math.floor(Math.random() * 20000);
@@ -100,7 +101,7 @@ async function main() {
   try {
     const health = await waitForServer();
     assert.strictEqual(health.body.service, 'youtube-dictation-pause');
-    assert.strictEqual(health.body.version, '1.2.0');
+    assert.strictEqual(health.body.version, packageJson.version);
 
     const initialState = await request('GET', '/state');
     assert.strictEqual(initialState.statusCode, 200);

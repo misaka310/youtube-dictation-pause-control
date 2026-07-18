@@ -5,25 +5,49 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const buildScriptPath = path.join(root, 'scripts', 'windows', 'build-release.ps1');
 const runtimeVerifierPath = path.join(root, 'scripts', 'windows', 'verify-release-runtime.ps1');
+const releaseTagValidatorPath = path.join(root, 'scripts', 'windows', 'validate-release-tag.ps1');
 const noticesPath = path.join(root, 'THIRD_PARTY_NOTICES.md');
 const gplPath = path.join(root, 'licenses', 'AutoHotkey-GPL-2.0.txt');
 const ciPath = path.join(root, '.github', 'workflows', 'ci.yml');
+const releaseWorkflowPath = path.join(root, '.github', 'workflows', 'release.yml');
+const readmePath = path.join(root, 'README.md');
+const releasingGuidePath = path.join(root, 'docs', 'releasing.md');
+const publicReleaseChecklistPath = path.join(root, 'docs', 'public-release-checklist.md');
+const packagePath = path.join(root, 'package.json');
+const extensionManifestPath = path.join(root, 'extension', 'manifest.json');
+const serverPath = path.join(root, 'server', 'server.js');
 
 for (const [filePath, message] of [
   [buildScriptPath, 'build-release.ps1 must exist'],
   [runtimeVerifierPath, 'verify-release-runtime.ps1 must exist'],
+  [releaseTagValidatorPath, 'validate-release-tag.ps1 must exist'],
   [noticesPath, 'THIRD_PARTY_NOTICES.md must exist'],
   [gplPath, 'AutoHotkey GPL-2.0 license text must exist'],
-  [ciPath, 'CI workflow must exist']
+  [ciPath, 'CI workflow must exist'],
+  [releaseWorkflowPath, 'Release workflow must exist'],
+  [readmePath, 'README.md must exist'],
+  [releasingGuidePath, 'release guide must exist'],
+  [publicReleaseChecklistPath, 'public release checklist must exist'],
+  [packagePath, 'package.json must exist'],
+  [extensionManifestPath, 'extension manifest must exist'],
+  [serverPath, 'server.js must exist']
 ]) {
   assert.ok(fs.existsSync(filePath), message);
 }
 
 const buildScript = fs.readFileSync(buildScriptPath, 'utf8');
 const runtimeVerifier = fs.readFileSync(runtimeVerifierPath, 'utf8');
+const releaseTagValidator = fs.readFileSync(releaseTagValidatorPath, 'utf8');
 const notices = fs.readFileSync(noticesPath, 'utf8');
 const gpl = fs.readFileSync(gplPath, 'utf8');
 const ci = fs.readFileSync(ciPath, 'utf8');
+const releaseWorkflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
+const readme = fs.readFileSync(readmePath, 'utf8');
+const releasingGuide = fs.readFileSync(releasingGuidePath, 'utf8');
+const publicReleaseChecklist = fs.readFileSync(publicReleaseChecklistPath, 'utf8');
+const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+const extensionManifest = JSON.parse(fs.readFileSync(extensionManifestPath, 'utf8'));
+const server = fs.readFileSync(serverPath, 'utf8');
 
 assert.match(buildScript, /\$AutoHotkeyVersion\s*=\s*'2\.0\.\d+'/);
 assert.match(buildScript, /\$Ahk2ExeVersion\s*=\s*'[^']+'/);
@@ -76,6 +100,41 @@ assert.match(runtimeVerifier, /WindowCloser/);
 
 assert.match(ci, /npm test/);
 assert.match(ci, /build-release\.ps1/);
+assert.match(ci, /branches:\s*\r?\n\s*- ['"]?\*\*['"]?/);
+
+assert.match(releaseWorkflow, /tags:\s*\r?\n\s*- ['"]v\*['"]/);
+assert.match(releaseWorkflow, /permissions:\s*\r?\n\s*contents:\s*write/);
+assert.match(releaseWorkflow, /runs-on:\s*windows-latest/);
+assert.match(releaseWorkflow, /node-version:\s*22/);
+assert.match(releaseWorkflow, /validate-release-tag\.ps1/);
+assert.match(releaseWorkflow, /npm test/);
+assert.match(releaseWorkflow, /build-release\.ps1/);
+assert.match(releaseWorkflow, /Get-FileHash[^\r\n]+SHA256/i);
+assert.match(releaseWorkflow, /SHA256SUMS\.txt/);
+assert.match(releaseWorkflow, /gh release view/);
+assert.match(releaseWorkflow, /gh release upload[^\r\n]+--clobber/);
+assert.match(releaseWorkflow, /gh release create/);
+assert.match(releaseWorkflow, /--generate-notes/);
+assert.match(releaseWorkflow, /GH_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/);
+
+assert.match(releaseTagValidator, /package\.json/);
+assert.match(releaseTagValidator, /"v"\s*\+\s*\$package\.version/);
+assert.match(releaseTagValidator, /throw/);
+
+assert.match(readme, /releases\/latest/);
+assert.match(readme, /vX\.Y\.Z/);
+assert.match(readme, /SHA256SUMS\.txt/);
+assert.match(readme, /docs\/releasing\.md/);
+assert.match(releasingGuide, /package\.json/);
+assert.match(releasingGuide, /vX\.Y\.Z/);
+assert.match(releasingGuide, /自動/);
+assert.match(publicReleaseChecklist, /GitHub Actions/i);
+assert.match(publicReleaseChecklist, /SHA256SUMS\.txt/);
+
+assert.strictEqual(extensionManifest.version, packageJson.version, 'extension manifest version must match package.json');
+const serverVersionMatch = server.match(/const VERSION = '([^']+)'/);
+assert.ok(serverVersionMatch, 'server version constant must exist');
+assert.strictEqual(serverVersionMatch[1], packageJson.version, 'server version must match package.json');
 
 assert.match(notices, /AutoHotkey/i);
 assert.match(notices, /GNU General Public License version 2|GPL-2\.0/i);

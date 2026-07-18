@@ -21,8 +21,9 @@
 5. 自動検証可能な範囲は次を実行し、`recoveryVerified`と`ownedShutdownVerified`がともに`true`になること。
 
 ```powershell
+$version = (Get-Content -Raw package.json | ConvertFrom-Json).version
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-release-runtime.ps1 `
-  -PackageDirectory dist\YouTubeDictationPauseControl-1.2.0
+  -PackageDirectory "dist\YouTubeDictationPauseControl-$version"
 ```
 
 ## 記録ルール
