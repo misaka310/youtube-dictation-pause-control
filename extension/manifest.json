@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Dictation Pause Control",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "音声入力中だけYouTubeの再生を自動で一時停止し、終了時に録音開始時点で再生中だった動画だけを再開します。(HTTP Bridge / BG fetch)",
   "background": {
     "service_worker": "background.js"
