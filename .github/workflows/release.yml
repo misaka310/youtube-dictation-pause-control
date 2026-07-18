@@ -51,8 +51,13 @@ jobs:
           $package = Get-Content -Raw -LiteralPath package.json | ConvertFrom-Json
           $zipPath = "dist\YouTubeDictationPauseControl-$($package.version)-windows-x64.zip"
           $checksumPath = 'dist\SHA256SUMS.txt'
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $ghPath = (Get-Command gh.exe -ErrorAction Stop).Source
+          $probeStdout = Join-Path $env:RUNNER_TEMP 'gh-release-view.stdout.txt'
+          $probeStderr = Join-Path $env:RUNNER_TEMP 'gh-release-view.stderr.txt'
+          Remove-Item -LiteralPath $probeStdout, $probeStderr -Force -ErrorAction SilentlyContinue
+          $releaseProbe = Start-Process -FilePath $ghPath -ArgumentList @('release', 'view', $tag) -RedirectStandardOutput $probeStdout -RedirectStandardError $probeStderr -NoNewWindow -Wait -PassThru
+          $releaseExists = ($releaseProbe.ExitCode -eq 0)
+          if ($releaseExists) {
             gh release upload $tag $zipPath $checksumPath --clobber
           } else {
             gh release create $tag $zipPath $checksumPath --verify-tag --generate-notes --title "YouTube Dictation Pause Control $tag"
