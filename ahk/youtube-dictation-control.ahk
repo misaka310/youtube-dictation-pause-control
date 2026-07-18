@@ -161,7 +161,29 @@ ParseHotkey(keyStr) {
     return res
 }
 
+IsSupportedNodeExecutable(nodeExe) {
+    try {
+        shell := ComObject("WScript.Shell")
+        command := '"' . nodeExe . '" --version'
+        exec := shell.Exec(command)
+        versionText := Trim(exec.StdOut.ReadAll())
+        if (!RegExMatch(versionText, "^v(\d+)\.", &match)) {
+            return false
+        }
+        return Integer(match[1]) >= 22
+    } catch as err {
+        LogMessage("WARNING: Failed to validate Node.js executable " . nodeExe . ": " . err.Message)
+        return false
+    }
+}
+
 ResolveNodeExecutable() {
+    global APP_ROOT
+
+    bundledNode := APP_ROOT . "\vendor\node\node.exe"
+    if (FileExist(bundledNode)) {
+        return bundledNode
+    }
     localAppData := EnvGet("LOCALAPPDATA")
     candidates := [
         A_ProgramFiles . "\nodejs\node.exe",
@@ -169,7 +191,7 @@ ResolveNodeExecutable() {
     ]
 
     for candidate in candidates {
-        if (FileExist(candidate)) {
+        if (FileExist(candidate) && IsSupportedNodeExecutable(candidate)) {
             return candidate
         }
     }
@@ -181,7 +203,7 @@ ResolveNodeExecutable() {
             continue
         }
         candidate := cleanPart . "\node.exe"
-        if (FileExist(candidate)) {
+        if (FileExist(candidate) && IsSupportedNodeExecutable(candidate)) {
             return candidate
         }
     }

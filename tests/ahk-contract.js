@@ -104,6 +104,26 @@ test('AHK launches Node directly and hidden instead of opening a terminal', () =
   assert.doesNotMatch(startFunction[1], /cmd\.exe|wt\.exe|start-server\.bat/i);
 });
 
+test('AHK prefers the bundled Node runtime before system installations', () => {
+  const resolver = ahk.match(/ResolveNodeExecutable\(\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(resolver, 'ResolveNodeExecutable function must exist');
+  const body = resolver[1];
+  assert.match(body, /APP_ROOT\s*\.\s*"\\vendor\\node\\node\.exe"/);
+  assert.match(body, /FileExist\(bundledNode\)/);
+  assert.match(body, /return bundledNode/);
+  assert.ok(
+    body.indexOf('vendor\\node\\node.exe') < body.indexOf('A_ProgramFiles'),
+    'bundled Node must be checked before system installations'
+  );
+});
+
+test('AHK accepts only Node.js 22 or later for system fallbacks', () => {
+  assert.match(ahk, /IsSupportedNodeExecutable\(nodeExe\)/);
+  assert.match(ahk, /RegExMatch\(versionText,\s*"\^v\(\\d\+\)\\\."/);
+  assert.match(ahk, /Integer\(match\[1\]\)\s*>=\s*22/);
+  assert.match(ahk, /FileExist\(candidate\)\s*&&\s*IsSupportedNodeExecutable\(candidate\)/);
+});
+
 test('AHK monitors bridge health with failure debounce and restart throttling', () => {
   assert.match(ahk, /global\s+HEALTH_CHECK_INTERVAL_MS\s*:=\s*5000/);
   assert.match(ahk, /global\s+HEALTH_FAILURE_THRESHOLD\s*:=\s*2/);

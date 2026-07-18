@@ -15,6 +15,17 @@ Release packages include the AutoHotkey v2.0.26 self-contained runtime inside `Y
 
 The MIT license for this project's own files does not replace or alter the GPL-2.0 terms that apply to the included AutoHotkey runtime.
 
+## Node.js runtime
+
+Release packages include the official Node.js v24.18.0 Windows x64 distribution under `vendor/node` so end users do not need a separate Node.js installation.
+
+- Project: Node.js
+- Version: 24.18.0
+- License and bundled third-party notices: `vendor/node/LICENSE`
+- Upstream release: `https://nodejs.org/download/release/v24.18.0/`
+
+The Node.js distribution is copied without removing its upstream license and notice files.
+
 ## Ahk2Exe build tool
 
 The release executable is produced with Ahk2Exe 1.1.37.02a2. Ahk2Exe is a build-time tool and is not included in the release package.

@@ -9,6 +9,8 @@ $ErrorActionPreference = 'Stop'
 $packageRoot = (Resolve-Path -LiteralPath $PackageDirectory).Path
 $controllerPath = Join-Path $packageRoot 'YouTubeDictationControl.exe'
 $serverPath = Join-Path $packageRoot 'server\server.js'
+$bundledNodePath = Join-Path $packageRoot 'vendor\node\node.exe'
+$bundledNodeLicensePath = Join-Path $packageRoot 'vendor\node\LICENSE'
 $healthUrl = "http://127.0.0.1:$Port/health"
 
 if (-not (Test-Path -LiteralPath $controllerPath)) {
@@ -16,6 +18,29 @@ if (-not (Test-Path -LiteralPath $controllerPath)) {
 }
 if (-not (Test-Path -LiteralPath $serverPath)) {
     throw "Server script not found: $serverPath"
+}
+if (-not (Test-Path -LiteralPath $bundledNodePath)) {
+    throw "Bundled Node.js executable not found: $bundledNodePath"
+}
+if (-not (Test-Path -LiteralPath $bundledNodeLicensePath)) {
+    throw "Bundled Node.js license not found: $bundledNodeLicensePath"
+}
+$bundledNodeVersionStdout = Join-Path $env:TEMP "youtube-dictation-node-version-$PID.stdout.txt"
+$bundledNodeVersionStderr = Join-Path $env:TEMP "youtube-dictation-node-version-$PID.stderr.txt"
+Remove-Item -LiteralPath $bundledNodeVersionStdout, $bundledNodeVersionStderr -Force -ErrorAction SilentlyContinue
+$bundledNodeVersionProcess = Start-Process -FilePath $bundledNodePath `
+    -ArgumentList @('--version') `
+    -RedirectStandardOutput $bundledNodeVersionStdout `
+    -RedirectStandardError $bundledNodeVersionStderr `
+    -NoNewWindow -Wait -PassThru
+if ($bundledNodeVersionProcess.ExitCode -ne 0) {
+    $bundledNodeVersionError = Get-Content -Raw -LiteralPath $bundledNodeVersionStderr -ErrorAction SilentlyContinue
+    throw "Bundled Node.js version check failed with exit code $($bundledNodeVersionProcess.ExitCode): $bundledNodeVersionError"
+}
+$bundledNodeVersion = ([string](Get-Content -Raw -LiteralPath $bundledNodeVersionStdout)).Trim()
+Remove-Item -LiteralPath $bundledNodeVersionStdout, $bundledNodeVersionStderr -Force -ErrorAction SilentlyContinue
+if ($bundledNodeVersion -cne 'v24.18.0') {
+    throw "Unexpected bundled Node.js version: $bundledNodeVersion"
 }
 
 Add-Type @'
@@ -144,6 +169,9 @@ try {
     if ($initialServer.Name -ine 'node.exe') {
         throw "Bridge listener is not node.exe: $($initialServer.Name)"
     }
+    if ([string]$initialServer.ExecutablePath -ine $bundledNodePath) {
+        throw "Bridge did not use the bundled Node.js executable: $($initialServer.ExecutablePath)"
+    }
     if ([string]$initialServer.CommandLine -notlike "*$serverPath*") {
         throw 'Node bridge command line does not contain the packaged server path.'
     }
@@ -162,6 +190,12 @@ try {
     if ($null -eq $recoveredServer -or [int]$recoveredServer.ParentProcessId -ne [int]$controller.Id) {
         throw 'Recovered Node bridge is not owned by the tray controller.'
     }
+    if ([string]$recoveredServer.ExecutablePath -ine $bundledNodePath) {
+        throw "Recovered bridge did not use the bundled Node.js executable: $($recoveredServer.ExecutablePath)"
+    }
+    if ([string]$recoveredServer.CommandLine -notlike "*$serverPath*") {
+        throw 'Recovered Node bridge command line does not contain the packaged server path.'
+    }
 
     $closedWindows = [WindowCloser]::CloseAll([uint32]$controller.Id)
     if ($closedWindows -le 0) {
@@ -178,6 +212,8 @@ try {
         ok = $true
         service = $health.service
         version = $health.version
+        bundledNodeVersion = $bundledNodeVersion
+        bundledNodeExecutable = $bundledNodePath
         controllerPid = $controller.Id
         initialServerPid = $initialServerPid
         recoveredServerPid = $recoveredServerPid

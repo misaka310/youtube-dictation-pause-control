@@ -12,10 +12,13 @@ if ([string]::IsNullOrWhiteSpace($env:ComSpec)) {
 
 $AutoHotkeyVersion = '2.0.26'
 $Ahk2ExeVersion = '1.1.37.02a2'
+$NodeVersion = '24.18.0'
+$NodeArchiveSha256 = '0AE68406B42D7725661DA979B1403EC9926DA205C6770827F33AAC9D8F26E821'
 $AutoHotkeyArchiveSha256 = '43522AA3122A57784AC5DB30ABF85C2244475C36ACD7796E2C993355F9E926AE'
 $Ahk2ExeArchiveSha256 = 'C29B8C3A5124850D79FC9E66E2CA79677C377D7F31631AD3022BA159C5D9E3BE'
 $AutoHotkeySourceSha256 = '765ADA5AE0A543F470BCD30371A7B95438E59351B0A20508C516DF76A4F73CA4'
 
+$NodeArchiveUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip"
 $AutoHotkeyArchiveUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$AutoHotkeyVersion/AutoHotkey_$AutoHotkeyVersion.zip"
 $Ahk2ExeArchiveUrl = "https://github.com/AutoHotkey/Ahk2Exe/releases/download/Ahk2Exe$Ahk2ExeVersion/Ahk2Exe$Ahk2ExeVersion.zip"
 $AutoHotkeySourceUrl = "https://github.com/AutoHotkey/AutoHotkey/archive/refs/tags/v$AutoHotkeyVersion.zip"
@@ -79,12 +82,27 @@ function Copy-DirectoryContents {
 
 New-Item -ItemType Directory -Force -Path $cacheDir, $distDir | Out-Null
 
+$nodeArchive = Join-Path $cacheDir "node-v$NodeVersion-win-x64.zip"
 $ahkArchive = Join-Path $cacheDir "AutoHotkey_$AutoHotkeyVersion.zip"
 $ahk2ExeArchive = Join-Path $cacheDir "Ahk2Exe$Ahk2ExeVersion.zip"
 $ahkSourceArchive = Join-Path $cacheDir "AutoHotkey-v$AutoHotkeyVersion-source.zip"
+Get-VerifiedDownload -Url $NodeArchiveUrl -Destination $nodeArchive -ExpectedSha256 $NodeArchiveSha256
 Get-VerifiedDownload -Url $AutoHotkeyArchiveUrl -Destination $ahkArchive -ExpectedSha256 $AutoHotkeyArchiveSha256
 Get-VerifiedDownload -Url $Ahk2ExeArchiveUrl -Destination $ahk2ExeArchive -ExpectedSha256 $Ahk2ExeArchiveSha256
 Get-VerifiedDownload -Url $AutoHotkeySourceUrl -Destination $ahkSourceArchive -ExpectedSha256 $AutoHotkeySourceSha256
+
+$nodeToolsRoot = Join-Path $cacheDir "node-tools-$NodeVersion"
+if (Test-Path -LiteralPath $nodeToolsRoot) {
+    Remove-Item -LiteralPath $nodeToolsRoot -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $nodeToolsRoot | Out-Null
+Expand-Archive -LiteralPath $nodeArchive -DestinationPath $nodeToolsRoot -Force
+$nodeExtractDir = Join-Path $nodeToolsRoot "node-v$NodeVersion-win-x64"
+foreach ($requiredNodeFile in @('node.exe', 'LICENSE')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $nodeExtractDir $requiredNodeFile))) {
+        throw "Required bundled Node.js file is missing: $requiredNodeFile"
+    }
+}
 
 $toolsDir = Join-Path $cacheDir "tools-$AutoHotkeyVersion-$Ahk2ExeVersion"
 if (Test-Path -LiteralPath $toolsDir) {
@@ -148,6 +166,7 @@ New-Item -ItemType Directory -Force -Path $serverDestination | Out-Null
 Copy-Item -LiteralPath (Join-Path $rootDir 'server\server.js') -Destination $serverDestination -Force
 Copy-Item -LiteralPath (Join-Path $rootDir 'server\log-writer.js') -Destination $serverDestination -Force
 Copy-DirectoryContents -Source (Join-Path $rootDir 'extension') -Destination (Join-Path $stageDir 'extension')
+Copy-DirectoryContents -Source $nodeExtractDir -Destination (Join-Path $stageDir 'vendor\node')
 
 $configDestination = Join-Path $stageDir 'config'
 New-Item -ItemType Directory -Force -Path $configDestination | Out-Null
@@ -177,6 +196,8 @@ $requiredEntries = @(
     'server\log-writer.js',
     'extension\manifest.json',
     'config\settings.example.json',
+    'vendor\node\node.exe',
+    'vendor\node\LICENSE',
     'THIRD_PARTY_NOTICES.md',
     'licenses\AutoHotkey-GPL-2.0.txt',
     "third_party_sources\AutoHotkey-v$AutoHotkeyVersion-source.zip"
