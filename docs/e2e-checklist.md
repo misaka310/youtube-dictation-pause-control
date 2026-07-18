@@ -4,7 +4,7 @@
 
 ## 共通準備
 
-- Node.js 22以上、Chromium系ブラウザ、Typeless / Wispr Flowを用意する。配布版の利用にAutoHotkeyの別インストールは不要。
+- Chromium系ブラウザとTypeless / Wispr Flowを用意する。配布版にはNode.jsとAutoHotkeyが含まれるため、どちらも別インストールは不要。
 - `extension`をパッケージ化されていない拡張機能として読み込む。
 - 配布フォルダの`YouTubeDictationControl.exe`を起動する。
 - ターミナルが開いたままにならず、Windows右下の通知領域にアイコンが表示されることを確認する。
@@ -18,7 +18,7 @@
 2. `Restart local bridge`を選び、Bridgeが再び`running`になること。
 3. `Start with Windows`をオン・オフし、現在のユーザーのスタートアップフォルダにショートカットが作成・削除されること。
 4. `Exit`を選び、通知領域アイコンと、このEXEが起動したNode.jsだけが終了すること。
-5. 自動検証可能な範囲は次を実行し、`recoveryVerified`と`ownedShutdownVerified`がともに`true`になること。
+5. 自動検証可能な範囲は次を実行し、`bundledNodeVersion`が`v24.18.0`、`recoveryVerified`と`ownedShutdownVerified`がともに`true`になること。
 
 ```powershell
 $version = (Get-Content -Raw package.json | ConvertFrom-Json).version
