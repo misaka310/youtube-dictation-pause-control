@@ -8,7 +8,7 @@ Release workflowはWindows／Node.js 22環境で次を実行します。
 
 1. タグ名と`package.json`の`version`が完全一致することを検証
 2. `npm test`を実行
-3. `scripts/windows/build-release.ps1`で自己完結EXEとZIPを生成
+3. `scripts/windows/build-release.ps1`で自己完結EXE、固定版Node.jsランタイム、Windows x64 ZIPを生成
 4. ZIPのSHA-256を`SHA256SUMS.txt`へ出力
 5. GitHub Releaseを作成し、ZIPと`SHA256SUMS.txt`を添付
 
@@ -22,7 +22,7 @@ Release workflowはWindows／Node.js 22環境で次を実行します。
 
 ```json
 {
-  "version": "1.2.2"
+  "version": "1.3.0"
 }
 ```
 
@@ -48,7 +48,7 @@ git push origin "v$version"
 
 GitHub Actionsの`Release` workflowが成功し、GitHub Releaseに次の2ファイルが添付されていることを確認します。
 
-- `YouTubeDictationPauseControl-X.Y.Z-windows-x64.zip`
+- `YouTubeDictationPauseControl-X.Y.Z-windows-x64.zip`（`vendor/node/node.exe`と`vendor/node/LICENSE`を含む）
 - `SHA256SUMS.txt`
 
 Release本文はGitHubの自動生成ノートを使用します。
@@ -63,7 +63,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
   -PackageDirectory dist\YouTubeDictationPauseControl-X.Y.Z
 ```
 
-`validate-release-tag.ps1`には、実際に`package.json`へ設定したバージョンと同じタグを渡してください。
+`validate-release-tag.ps1`には、実際に`package.json`へ設定したバージョンと同じタグを渡してください。`verify-release-runtime.ps1`では、`bundledNodeVersion`が`v24.18.0`で、Bridgeの実行ファイルが配布フォルダ内の`vendor/node/node.exe`であることも確認します。
+
+## 同梱Node.jsを更新する
+
+Node.jsランタイムを更新する場合は、`scripts/windows/build-release.ps1`の`NodeVersion`、公式Windows x64 ZIPのURL、`SHASUMS256.txt`に掲載されたSHA-256を同じPRで更新します。`latest-v24.x`のような可変URLは使用せず、完全なバージョンを固定します。
+
+同時に`THIRD_PARTY_NOTICES.md`、README、E2E・公開チェックリスト、Node.jsバージョンを検証する契約テストを更新し、配布ZIPの`vendor/node/node.exe --version`と`vendor/node/LICENSE`を確認します。
 
 ## 失敗時
 

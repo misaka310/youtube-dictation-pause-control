@@ -51,6 +51,9 @@ const server = fs.readFileSync(serverPath, 'utf8');
 
 assert.match(buildScript, /\$AutoHotkeyVersion\s*=\s*'2\.0\.\d+'/);
 assert.match(buildScript, /\$Ahk2ExeVersion\s*=\s*'[^']+'/);
+assert.match(buildScript, /\$NodeVersion\s*=\s*'24\.18\.0'/);
+assert.match(buildScript, /\$NodeArchiveSha256\s*=\s*'0AE68406B42D7725661DA979B1403EC9926DA205C6770827F33AAC9D8F26E821'/);
+assert.match(buildScript, /nodejs\.org\/dist\/v\$NodeVersion\/node-v\$NodeVersion-win-x64\.zip/);
 assert.match(buildScript, /\$AutoHotkeyArchiveSha256\s*=\s*'[A-Fa-f0-9]{64}'/);
 assert.match(buildScript, /github\.com\/AutoHotkey\/AutoHotkey\/releases\/download\/v\$AutoHotkeyVersion\/AutoHotkey_\$AutoHotkeyVersion\.zip/);
 assert.doesNotMatch(buildScript, /www\.autohotkey\.com\/download/);
@@ -72,6 +75,8 @@ for (const requiredEntry of [
   'server',
   'extension',
   'settings.example.json',
+  'vendor\\node\\node.exe',
+  'vendor\\node\\LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'AutoHotkey-GPL-2.0.txt',
   'AutoHotkey-v$AutoHotkeyVersion-source.zip'
@@ -92,6 +97,11 @@ for (const prohibitedEntry of [
 }
 
 assert.match(runtimeVerifier, /YouTubeDictationControl\.exe/);
+assert.match(runtimeVerifier, /vendor\\node\\node\.exe/);
+assert.match(runtimeVerifier, /ExecutablePath\s+-ine\s+\$bundledNodePath/);
+assert.match(runtimeVerifier, /Start-Process\s+-FilePath\s+\$bundledNodePath/);
+assert.match(runtimeVerifier, /RedirectStandardOutput/);
+assert.match(runtimeVerifier, /bundledNodeVersionProcess\.ExitCode/);
 assert.match(runtimeVerifier, /ParentProcessId/);
 assert.match(runtimeVerifier, /Wait-NewListenerProcessId/);
 assert.match(runtimeVerifier, /Stop-Process\s+-Id\s+\$initialServerPid\s+-Force/);
@@ -126,6 +136,8 @@ assert.match(releaseTagValidator, /"v"\s*\+\s*\$package\.version/);
 assert.match(releaseTagValidator, /throw/);
 
 assert.match(readme, /releases\/latest/);
+assert.match(readme, /Node\.jsとAutoHotkeyのインストールは不要/);
+assert.doesNotMatch(readme, /Node\.js 22以上は別途必要|Node\.js自体はEXEに同梱していません/);
 assert.match(readme, /vX\.Y\.Z/);
 assert.match(readme, /SHA256SUMS\.txt/);
 assert.match(readme, /docs\/releasing\.md/);
@@ -141,6 +153,9 @@ assert.ok(serverVersionMatch, 'server version constant must exist');
 assert.strictEqual(serverVersionMatch[1], packageJson.version, 'server version must match package.json');
 
 assert.match(notices, /AutoHotkey/i);
+assert.match(notices, /Node\.js/i);
+assert.match(notices, /24\.18\.0/);
+assert.match(notices, /vendor\/node\/LICENSE/);
 assert.match(notices, /GNU General Public License version 2|GPL-2\.0/i);
 assert.match(notices, /corresponding source/i);
 assert.match(notices, /2\.0\.\d+/);

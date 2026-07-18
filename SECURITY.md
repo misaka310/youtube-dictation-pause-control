@@ -7,6 +7,7 @@ This project is a local Windows utility. It does not use accounts, API keys, OAu
 - The Node.js HTTP bridge binds to `127.0.0.1` only.
 - The supported default port is `17654`. Changing it requires updating the local settings plus every hard-coded extension, startup, health-check, and shutdown reference to `17654`; changing only `config/settings.json` is not sufficient.
 - Do not expose this port through firewall rules, reverse proxies, tunnels, or public network bindings.
+- Release packages use the pinned Node.js runtime under `vendor/node`. Install a newer application Release to receive runtime updates instead of replacing individual files inside `vendor/node`.
 - Runtime logs are written under `logs/` and `*.log` files are ignored by Git.
 - Runtime PID files are written under `runtime/` and ignored by Git.
 - User-specific `config/settings.json` is ignored by Git; publish `config/settings.example.json` only.
