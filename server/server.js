@@ -4,7 +4,7 @@ const path = require('path');
 const { appendLineWithRetry } = require('./log-writer');
 
 const SERVICE_NAME = 'youtube-dictation-pause';
-const VERSION = '1.2.1';
+const VERSION = '1.2.2';
 const DEFAULT_PORT = 17654;
 const DEFAULT_SETTINGS_PATH = path.join(__dirname, '..', 'config', 'settings.json');
 const RUNTIME_DIR = path.join(__dirname, '..', 'runtime');
