@@ -22,7 +22,7 @@ Release workflowはWindows／Node.js 22環境で次を実行します。
 
 ```json
 {
-  "version": "1.2.1"
+  "version": "1.2.2"
 }
 ```
 
