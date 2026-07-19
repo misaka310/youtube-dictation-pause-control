@@ -44,9 +44,11 @@ test('reset clears both app states, aggregate state, and debounce timestamps', (
 
   assert.match(body, /isTypelessActive\s*:=\s*false/);
   assert.match(body, /isWisprFlowActive\s*:=\s*false/);
+  assert.match(body, /isVoiceBridgeActive\s*:=\s*false/);
   assert.match(body, /anyDictationActive\s*:=\s*false/);
   assert.match(body, /lastTypelessTick\s*:=\s*0/);
   assert.match(body, /lastWisprFlowTick\s*:=\s*0/);
+  assert.match(body, /voiceBridgeChordWasDown\s*:=\s*false/);
 });
 
 test('reset synchronizes the server to inactive', () => {
@@ -60,15 +62,28 @@ test('AHK registers the configured reset hotkey', () => {
   assert.match(ahk, /Hotkey\(parsedResetKey,\s*ResetDictationState\)/);
 });
 
-test('Typeless modifier chord uses only physical Right Ctrl and Right Shift', () => {
-  assert.match(ahk, /global\s+typelessChordArmed\s*:=\s*false/);
-  assert.match(ahk, /HandleTypelessModifierDown\([^)]*\)/);
-  assert.match(ahk, /GetKeyState\("RControl",\s*"P"\)/);
-  assert.match(ahk, /GetKeyState\("RShift",\s*"P"\)/);
-  assert.match(ahk, /RegisterTypelessModifierHooks\(\)/);
-  assert.match(ahk, /for\s+keyName\s+in\s+\["RControl",\s*"RShift"\]/);
-  assert.doesNotMatch(ahk, /\["LControl",\s*"RControl",\s*"LShift",\s*"RShift"\]/);
-  assert.doesNotMatch(ahk, /A_PriorKey/);
+test('Typeless uses one direct Right Ctrl + Right Shift hotkey event', () => {
+  assert.match(ahk, /passThroughTypelessKey\s*:=\s*"~>\^RShift"/);
+  assert.match(ahk, /Hotkey\(passThroughTypelessKey,\s*TriggerTypeless\)/);
+  assert.match(ahk, /TriggerTypeless\(\*\)/);
+  assert.doesNotMatch(ahk, /typelessChordArmed/);
+  assert.doesNotMatch(ahk, /HandleTypelessModifierDown/);
+  assert.doesNotMatch(ahk, /RegisterTypelessModifierHooks/);
+});
+
+test('Local Voice Bridge hold chord participates in aggregate dictation state', () => {
+  assert.match(ahk, /global\s+PHYSICAL_HOTKEY_POLL_INTERVAL_MS\s*:=\s*20/);
+  assert.match(ahk, /global\s+isVoiceBridgeActive\s*:=\s*false/);
+  assert.match(ahk, /global\s+voiceBridgeChordWasDown\s*:=\s*false/);
+  assert.match(ahk, /currentActiveState\s*:=\s*isTypelessActive\s*\|\|\s*isWisprFlowActive\s*\|\|\s*isVoiceBridgeActive/);
+});
+
+test('Local Voice Bridge monitors physical Right Ctrl and VK_OEM_102 while held', () => {
+  assert.match(ahk, /PollPhysicalHotkeys\(\)/);
+  assert.match(ahk, /GetAsyncKeyState[^\n]+0xA3/);
+  assert.match(ahk, /GetAsyncKeyState[^\n]+0xE2/);
+  assert.match(ahk, /isVoiceBridgeActive\s*:=\s*voiceBridgeChordDown/);
+  assert.match(ahk, /SetTimer\(PollPhysicalHotkeys,\s*PHYSICAL_HOTKEY_POLL_INTERVAL_MS\)/);
 });
 
 test('AHK log writes retry transient file locks', () => {
