@@ -24,13 +24,10 @@ global WISPR_FLOW_HOTKEY_RAW := "Ctrl+]"
 global RESET_HOTKEY_RAW := "Ctrl+Alt+R"
 global AUTO_START_SERVER := true
 global POLLING_INTERVAL_MS := 500
-global PHYSICAL_HOTKEY_POLL_INTERVAL_MS := 20
 global DEBUG_MODE := false
 
 global isTypelessActive := false
 global isWisprFlowActive := false
-global isVoiceBridgeActive := false
-global voiceBridgeChordWasDown := false
 global anyDictationActive := false
 global lastTypelessTick := 0
 global lastWisprFlowTick := 0
@@ -521,17 +518,40 @@ SendStateToServer(activeVal) {
     return false
 }
 
+ResetServerState() {
+    global PORT
+    url := "http://127.0.0.1:" . PORT . "/state"
+    body := '{"active": false, "source": "*"}'
+
+    LogMessage("POST /state source=* active=false sending")
+
+    try {
+        whr := ComObject("WinHttp.WinHttpRequest.5.1")
+        whr.SetTimeouts(500, 500, 2000, 2000)
+        whr.Open("POST", url, false)
+        whr.SetRequestHeader("Content-Type", "application/json")
+        whr.Send(body)
+        if (whr.Status = 200) {
+            LogMessage("POST /state source=* active=false succeeded")
+            return true
+        }
+        LogMessage("POST /state source=* active=false failed. HTTP Status: " . whr.Status)
+    } catch as err {
+        LogMessage("POST /state source=* active=false failed. Error: " . err.Message)
+    }
+    return false
+}
+
 UpdateDictationStatus() {
-    global isTypelessActive, isWisprFlowActive, isVoiceBridgeActive, anyDictationActive
+    global isTypelessActive, isWisprFlowActive, anyDictationActive
     global DEBUG_MODE, TYPELESS_HOTKEY_RAW, WISPR_FLOW_HOTKEY_RAW
 
-    currentActiveState := isTypelessActive || isWisprFlowActive || isVoiceBridgeActive
+    currentActiveState := isTypelessActive || isWisprFlowActive
 
     if (DEBUG_MODE) {
         statusText := "--- Dictation Status ---`n"
         statusText .= "Typeless (" . TYPELESS_HOTKEY_RAW . "): " . (isTypelessActive ? "ACTIVE" : "inactive") . "`n"
         statusText .= "Wispr Flow (" . WISPR_FLOW_HOTKEY_RAW . "): " . (isWisprFlowActive ? "ACTIVE" : "inactive") . "`n"
-        statusText .= "Local Voice Bridge (Right Ctrl + key left of Right Shift): " . (isVoiceBridgeActive ? "ACTIVE" : "inactive") . "`n"
         statusText .= "Any Active: " . (currentActiveState ? "YES" : "NO")
         ToolTip(statusText)
         SetTimer(() => ToolTip(), -3000)
@@ -549,19 +569,17 @@ UpdateDictationStatus() {
 }
 
 ResetDictationState(*) {
-    global isTypelessActive, isWisprFlowActive, isVoiceBridgeActive, anyDictationActive
-    global lastTypelessTick, lastWisprFlowTick, voiceBridgeChordWasDown, DEBUG_MODE
+    global isTypelessActive, isWisprFlowActive, anyDictationActive
+    global lastTypelessTick, lastWisprFlowTick, DEBUG_MODE
 
     isTypelessActive := false
     isWisprFlowActive := false
-    isVoiceBridgeActive := false
     anyDictationActive := false
     lastTypelessTick := 0
     lastWisprFlowTick := 0
-    voiceBridgeChordWasDown := false
 
     LogMessage("manual state reset: all dictation states -> inactive")
-    SendStateToServer(false)
+    ResetServerState()
 
     if (DEBUG_MODE) {
         ToolTip("Dictation state reset to inactive")
@@ -583,20 +601,6 @@ TriggerTypeless(*) {
     UpdateDictationStatus()
 }
 
-PollPhysicalHotkeys() {
-    global voiceBridgeChordWasDown, isVoiceBridgeActive
-
-    rightCtrlDown := (DllCall("GetAsyncKeyState", "Int", 0xA3, "Short") & 0x8000) != 0
-    keyLeftOfRightShiftDown := (DllCall("GetAsyncKeyState", "Int", 0xE2, "Short") & 0x8000) != 0
-    voiceBridgeChordDown := rightCtrlDown && keyLeftOfRightShiftDown
-
-    if (voiceBridgeChordDown != voiceBridgeChordWasDown) {
-        voiceBridgeChordWasDown := voiceBridgeChordDown
-        isVoiceBridgeActive := voiceBridgeChordDown
-        LogMessage("hotkey triggered (Local Voice Bridge). State: " . (isVoiceBridgeActive ? "ACTIVE" : "inactive"))
-        UpdateDictationStatus()
-    }
-}
 
 HandleTypelessKey(*) {
     global isTypelessActive, lastTypelessTick, DEBOUNCE_MS
@@ -674,9 +678,6 @@ if (TYPELESS_HOTKEY_RAW = "RightCtrl+RightShift") {
         LogMessage("ERROR: Failed to register Typeless hotkey " . passThroughTypelessKey . ": " . err.Message)
     }
 }
-
-SetTimer(PollPhysicalHotkeys, PHYSICAL_HOTKEY_POLL_INTERVAL_MS)
-LogMessage("Registered physical hotkey monitor: RightCtrl+VK_OEM_102")
 
 if (DEBUG_MODE) {
     ToolTip("YouTube Dictation Control Started`nDebug Mode: ON")

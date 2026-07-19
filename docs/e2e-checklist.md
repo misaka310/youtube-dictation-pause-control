@@ -1,10 +1,10 @@
 # 実ブラウザE2Eチェックリスト
 
-この文書は、実際のWindows、配布版`YouTubeDictationControl.exe`、Typeless / Wispr Flow / ChatGPT Local Voice Bridge、Chromium系ブラウザ、YouTube画面で行う手動確認用です。Node.jsだけの自動テスト結果を実ブラウザE2Eの実施結果として転記しないでください。
+この文書は、実際のWindows、配布版`YouTubeDictationControl.exe`、Typeless / Wispr Flow / Local Voice Bridge、Chromium系ブラウザ、YouTube画面で行う手動確認用です。Node.jsだけの自動テスト結果を実ブラウザE2Eの実施結果として転記しないでください。
 
 ## 共通準備
 
-- Chromium系ブラウザと、使用するTypeless / Wispr Flow / ChatGPT Local Voice Bridgeを用意する。配布版にはNode.jsとAutoHotkeyが含まれるため、どちらも別インストールは不要。
+- Chromium系ブラウザと、使用するTypeless / Wispr Flow / Local Voice Bridgeを用意する。配布版にはNode.jsとAutoHotkeyが含まれるため、どちらも別インストールは不要。
 - `extension`をパッケージ化されていない拡張機能として読み込む。
 - 配布フォルダの`YouTubeDictationControl.exe`を起動する。
 - ターミナルが開いたままにならず、Windows右下の通知領域にアイコンが表示されることを確認する。
@@ -103,11 +103,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 
 ---
 
-## 2-A. ChatGPT Local Voice Bridge開始・終了
+## 2-A. Local Voice Bridge開始・終了
 
 **前提条件**
 - YouTube動画が再生中。
-- ChatGPT Local Voice Bridgeのプッシュトゥトークが、右Ctrlと右Shift左の`＼ / _`キー。
+- 録音状態を直接通知する対応版Local Voice Bridgeを使用している。
+- プッシュトゥトークが、右Ctrlと右Shift左の`＼ / _`キー。
 
 **操作手順**
 1. 右Ctrlを押したまま、右Shift左の`＼ / _`キーを押し続ける。
@@ -119,15 +120,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 - キーを離した時に、同一sessionで所有している動画だけ再生する。
 
 **確認ログ**
-- AHK: `hotkey triggered (Local Voice Bridge). State: ACTIVE`
-- キーを離した時: `hotkey triggered (Local Voice Bridge). State: inactive`
+- Server: `POST /state source=local-voice-bridge active=true aggregate=true`
+- キーを離した時: `POST /state source=local-voice-bridge active=false aggregate=false`
+- 他の入力元もactiveの場合、2行目の`aggregate`は`true`のままになる。
 
 **失敗時の切り分け**
-- AHKログがない場合、`Registered physical hotkey monitor: RightCtrl+VK_OEM_102`を確認する。
+- Serverログに`source=local-voice-bridge`がない場合、Local Voice Bridge側の直接通知実装と`http://127.0.0.1:17654/health`を確認する。
 - HTTP / 拡張機能の切り分けはケース1と同じ。
 
 **復旧方法**
-- 2キーを離し、AHK再起動と`/reset`を行う。動画は必要に応じて手動再生する。
+- 2キーを離し、Local Voice BridgeとYouTube Dictation Pause Controlの起動状態を確認して`/reset`を行う。動画は必要に応じて手動再生する。
 
 **実施結果欄**
 - 状態: 未実施
@@ -700,14 +702,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 
 **期待結果**
 - リセット時にAHKのTypeless・Wispr Flow・集約状態がinactiveへ戻る。
-- Bridgeへ`active=false`が送られる。
-- 同一sessionでこのツールが停止した動画は再生を試みる。
+- Bridgeへ`source=*`, `active=false`が送られ、`activeSources=[]`になる。
+- sessionIdは変わらず、同一sessionでこのツールが停止した動画は再生を試みる。
 - 次の通常ホットキー1回目が開始扱いとなり、再生中動画を停止する。
 
 **確認ログ**
 - AHK: `manual state reset: all dictation states -> inactive`
-- AHK: `POST /state sending: active=false`と`POST /state succeeded`
-- Server: `POST /state active=false`
+- AHK: `POST /state source=* active=false sending`と`succeeded`
+- Server: `POST /state source=* active=false aggregate=false`
 - 次の通常ホットキーで`state changed: inactive -> active`
 
 **失敗時の切り分け**
