@@ -1,16 +1,16 @@
 # 実ブラウザE2Eチェックリスト
 
-この文書は、実際のWindows、配布版`YouTubeDictationControl.exe`、Typeless / Wispr Flow、Chromium系ブラウザ、YouTube画面で行う手動確認用です。Node.jsだけの自動テスト結果を実ブラウザE2Eの実施結果として転記しないでください。
+この文書は、実際のWindows、配布版`YouTubeDictationControl.exe`、Typeless / Wispr Flow / ChatGPT Local Voice Bridge、Chromium系ブラウザ、YouTube画面で行う手動確認用です。Node.jsだけの自動テスト結果を実ブラウザE2Eの実施結果として転記しないでください。
 
 ## 共通準備
 
-- Chromium系ブラウザとTypeless / Wispr Flowを用意する。配布版にはNode.jsとAutoHotkeyが含まれるため、どちらも別インストールは不要。
+- Chromium系ブラウザと、使用するTypeless / Wispr Flow / ChatGPT Local Voice Bridgeを用意する。配布版にはNode.jsとAutoHotkeyが含まれるため、どちらも別インストールは不要。
 - `extension`をパッケージ化されていない拡張機能として読み込む。
 - 配布フォルダの`YouTubeDictationControl.exe`を起動する。
 - ターミナルが開いたままにならず、Windows右下の通知領域にアイコンが表示されることを確認する。
 - 通知領域メニューの`Status: ...`が`running`になり、`http://127.0.0.1:17654/health`が`ok: true`を返すことを確認する。
 - `logs/control.log`とYouTubeタブのDevToolsコンソールを開く。
-- 各ケース開始前に、Typeless / Wispr Flowが録音していないことを確認する。内部状態が不明なら入力アプリを停止して`Ctrl + Alt + R`または通知領域の`Reset dictation state`を実行する。Bridgeだけを初期化する必要がある場合に限り、`curl.exe -X POST http://127.0.0.1:17654/reset`を使用する。
+- 各ケース開始前に、Typeless / Wispr Flowが録音しておらず、Local Voice Bridgeの2キーも離れていることを確認する。内部状態が不明なら入力アプリを停止して`Ctrl + Alt + R`または通知領域の`Reset dictation state`を実行する。Bridgeだけを初期化する必要がある場合に限り、`curl.exe -X POST http://127.0.0.1:17654/reset`を使用する。
 
 ## 常駐アプリの事前確認
 
@@ -28,7 +28,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 
 ## 記録ルール
 
-各ケースの「実施結果欄」は、実際に操作した場合だけ更新します。今回の文書更新時点では、下記20ケースはすべて実ブラウザ未実施です。
+各ケースの「実施結果欄」は、実際に操作した場合だけ更新します。今回の文書更新時点では、下記21ケースはすべて実ブラウザ未実施です。
 
 ---
 
@@ -73,14 +73,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 
 **前提条件**
 - YouTube動画が再生中。
-- Typelessのホットキーが`右Ctrl + 右Shift`。
+- Typelessのホットキーが「右Ctrlを先に押したまま右Shift」。
 - Wispr Flowは停止中。
 
 **操作手順**
-1. `右Ctrl + 右Shift`を押して離し、Typelessを開始する。
+1. 右Ctrlを先に押して保持し、そのまま右Shiftを押して離し、Typelessを開始する。
 2. 動画停止を確認する。
 3. `左Ctrl + 左Shift`を押しても動画状態が変わらないことを確認する。
-4. 400ms以上待ち、`右Ctrl + 右Shift`で終了する。
+4. 400ms以上待ち、右Ctrlを先に押したまま右Shiftをもう一度押して終了する。
 
 **期待結果**
 - 開始時に停止し、終了時に同一sessionで所有している動画だけ再生する。
@@ -90,7 +90,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 - Content Script: `[EXT] paused by script sessionId=...`、`[EXT] resumed by script sessionId=...`
 
 **失敗時の切り分け**
-- `右Ctrl + 右Shift`が他アプリ操作としてしか反応しない場合、AHKの`Registered Typeless physical modifier hooks`を確認。
+- 右Ctrl→右Shiftが他アプリ操作としてしか反応しない場合、AHKの`Registered Typeless hotkey: RightCtrl+RightShift via ~>^RShift`を確認。
 - HTTP / 拡張機能の切り分けはケース1と同じ。
 
 **復旧方法**
@@ -103,11 +103,44 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 
 ---
 
+## 2-A. ChatGPT Local Voice Bridge開始・終了
+
+**前提条件**
+- YouTube動画が再生中。
+- ChatGPT Local Voice Bridgeのプッシュトゥトークが、右Ctrlと右Shift左の`＼ / _`キー。
+
+**操作手順**
+1. 右Ctrlを押したまま、右Shift左の`＼ / _`キーを押し続ける。
+2. 録音中に動画が停止していることを確認する。
+3. どちらかのキーを離して録音を終了する。
+
+**期待結果**
+- 2キーを押している間だけLocal Voice Bridge状態がactiveになる。
+- キーを離した時に、同一sessionで所有している動画だけ再生する。
+
+**確認ログ**
+- AHK: `hotkey triggered (Local Voice Bridge). State: ACTIVE`
+- キーを離した時: `hotkey triggered (Local Voice Bridge). State: inactive`
+
+**失敗時の切り分け**
+- AHKログがない場合、`Registered physical hotkey monitor: RightCtrl+VK_OEM_102`を確認する。
+- HTTP / 拡張機能の切り分けはケース1と同じ。
+
+**復旧方法**
+- 2キーを離し、AHK再起動と`/reset`を行う。動画は必要に応じて手動再生する。
+
+**実施結果欄**
+- 状態: 未実施
+- 実施日時:
+- 結果・ログ:
+
+---
+
 ## 3. 最初から停止中の動画
 
 **前提条件**
 - YouTube動画をユーザー操作で停止済み。
-- Typeless / Wispr Flowは停止中。
+- Typeless / Wispr Flowは停止中で、Local Voice Bridgeの2キーも離れている。
 
 **操作手順**
 1. どちらかの音声入力を開始する。

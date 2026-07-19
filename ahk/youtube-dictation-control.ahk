@@ -24,14 +24,16 @@ global WISPR_FLOW_HOTKEY_RAW := "Ctrl+]"
 global RESET_HOTKEY_RAW := "Ctrl+Alt+R"
 global AUTO_START_SERVER := true
 global POLLING_INTERVAL_MS := 500
+global PHYSICAL_HOTKEY_POLL_INTERVAL_MS := 20
 global DEBUG_MODE := false
 
 global isTypelessActive := false
 global isWisprFlowActive := false
+global isVoiceBridgeActive := false
+global voiceBridgeChordWasDown := false
 global anyDictationActive := false
 global lastTypelessTick := 0
 global lastWisprFlowTick := 0
-global typelessChordArmed := false
 global DEBOUNCE_MS := 400
 
 global HEALTH_CHECK_INTERVAL_MS := 5000
@@ -520,15 +522,16 @@ SendStateToServer(activeVal) {
 }
 
 UpdateDictationStatus() {
-    global isTypelessActive, isWisprFlowActive, anyDictationActive
+    global isTypelessActive, isWisprFlowActive, isVoiceBridgeActive, anyDictationActive
     global DEBUG_MODE, TYPELESS_HOTKEY_RAW, WISPR_FLOW_HOTKEY_RAW
 
-    currentActiveState := isTypelessActive || isWisprFlowActive
+    currentActiveState := isTypelessActive || isWisprFlowActive || isVoiceBridgeActive
 
     if (DEBUG_MODE) {
         statusText := "--- Dictation Status ---`n"
         statusText .= "Typeless (" . TYPELESS_HOTKEY_RAW . "): " . (isTypelessActive ? "ACTIVE" : "inactive") . "`n"
         statusText .= "Wispr Flow (" . WISPR_FLOW_HOTKEY_RAW . "): " . (isWisprFlowActive ? "ACTIVE" : "inactive") . "`n"
+        statusText .= "Local Voice Bridge (Right Ctrl + key left of Right Shift): " . (isVoiceBridgeActive ? "ACTIVE" : "inactive") . "`n"
         statusText .= "Any Active: " . (currentActiveState ? "YES" : "NO")
         ToolTip(statusText)
         SetTimer(() => ToolTip(), -3000)
@@ -546,15 +549,16 @@ UpdateDictationStatus() {
 }
 
 ResetDictationState(*) {
-    global isTypelessActive, isWisprFlowActive, anyDictationActive
-    global lastTypelessTick, lastWisprFlowTick, typelessChordArmed, DEBUG_MODE
+    global isTypelessActive, isWisprFlowActive, isVoiceBridgeActive, anyDictationActive
+    global lastTypelessTick, lastWisprFlowTick, voiceBridgeChordWasDown, DEBUG_MODE
 
     isTypelessActive := false
     isWisprFlowActive := false
+    isVoiceBridgeActive := false
     anyDictationActive := false
     lastTypelessTick := 0
     lastWisprFlowTick := 0
-    typelessChordArmed := false
+    voiceBridgeChordWasDown := false
 
     LogMessage("manual state reset: all dictation states -> inactive")
     SendStateToServer(false)
@@ -565,7 +569,7 @@ ResetDictationState(*) {
     }
 }
 
-TriggerTypeless() {
+TriggerTypeless(*) {
     global isTypelessActive, lastTypelessTick, DEBOUNCE_MS
     currentTick := A_TickCount
     if (currentTick - lastTypelessTick < DEBOUNCE_MS) {
@@ -579,34 +583,19 @@ TriggerTypeless() {
     UpdateDictationStatus()
 }
 
-HandleTypelessModifierDown(*) {
-    global TYPELESS_HOTKEY_RAW, typelessChordArmed
+PollPhysicalHotkeys() {
+    global voiceBridgeChordWasDown, isVoiceBridgeActive
 
-    if (TYPELESS_HOTKEY_RAW != "RightCtrl+RightShift" || typelessChordArmed) {
-        return
+    rightCtrlDown := (DllCall("GetAsyncKeyState", "Int", 0xA3, "Short") & 0x8000) != 0
+    keyLeftOfRightShiftDown := (DllCall("GetAsyncKeyState", "Int", 0xE2, "Short") & 0x8000) != 0
+    voiceBridgeChordDown := rightCtrlDown && keyLeftOfRightShiftDown
+
+    if (voiceBridgeChordDown != voiceBridgeChordWasDown) {
+        voiceBridgeChordWasDown := voiceBridgeChordDown
+        isVoiceBridgeActive := voiceBridgeChordDown
+        LogMessage("hotkey triggered (Local Voice Bridge). State: " . (isVoiceBridgeActive ? "ACTIVE" : "inactive"))
+        UpdateDictationStatus()
     }
-
-    if (GetKeyState("RControl", "P") && GetKeyState("RShift", "P")) {
-        typelessChordArmed := true
-        TriggerTypeless()
-    }
-}
-
-HandleTypelessModifierUp(*) {
-    global typelessChordArmed
-
-    if (!GetKeyState("RControl", "P") || !GetKeyState("RShift", "P")) {
-        typelessChordArmed := false
-    }
-}
-
-RegisterTypelessModifierHooks() {
-    for keyName in ["RControl", "RShift"] {
-        Hotkey("~*" . keyName, HandleTypelessModifierDown)
-        Hotkey("~*" . keyName . " Up", HandleTypelessModifierUp)
-    }
-
-    LogMessage("Registered Typeless physical modifier hooks: RightCtrl+RightShift")
 }
 
 HandleTypelessKey(*) {
@@ -668,7 +657,13 @@ try {
 }
 
 if (TYPELESS_HOTKEY_RAW = "RightCtrl+RightShift") {
-    RegisterTypelessModifierHooks()
+    passThroughTypelessKey := "~>^RShift"
+    try {
+        Hotkey(passThroughTypelessKey, TriggerTypeless)
+        LogMessage("Registered Typeless hotkey: RightCtrl+RightShift via " . passThroughTypelessKey)
+    } catch as err {
+        LogMessage("ERROR: Failed to register Typeless hotkey " . passThroughTypelessKey . ": " . err.Message)
+    }
 } else {
     parsedTypelessKey := ParseHotkey(TYPELESS_HOTKEY_RAW)
     passThroughTypelessKey := "~" . parsedTypelessKey
@@ -679,6 +674,9 @@ if (TYPELESS_HOTKEY_RAW = "RightCtrl+RightShift") {
         LogMessage("ERROR: Failed to register Typeless hotkey " . passThroughTypelessKey . ": " . err.Message)
     }
 }
+
+SetTimer(PollPhysicalHotkeys, PHYSICAL_HOTKEY_POLL_INTERVAL_MS)
+LogMessage("Registered physical hotkey monitor: RightCtrl+VK_OEM_102")
 
 if (DEBUG_MODE) {
     ToolTip("YouTube Dictation Control Started`nDebug Mode: ON")
