@@ -16,6 +16,7 @@ const publicReleaseChecklistPath = path.join(root, 'docs', 'public-release-check
 const packagePath = path.join(root, 'package.json');
 const extensionManifestPath = path.join(root, 'extension', 'manifest.json');
 const serverPath = path.join(root, 'server', 'server.js');
+const appIconPath = path.join(root, 'assets', 'youtube-dictation.ico');
 
 for (const [filePath, message] of [
   [buildScriptPath, 'build-release.ps1 must exist'],
@@ -30,7 +31,8 @@ for (const [filePath, message] of [
   [publicReleaseChecklistPath, 'public release checklist must exist'],
   [packagePath, 'package.json must exist'],
   [extensionManifestPath, 'extension manifest must exist'],
-  [serverPath, 'server.js must exist']
+  [serverPath, 'server.js must exist'],
+  [appIconPath, 'YouTube Dictation application icon must exist']
 ]) {
   assert.ok(fs.existsSync(filePath), message);
 }
@@ -66,6 +68,8 @@ assert.match(buildScript, /\/in/i);
 assert.match(buildScript, /\/out/i);
 assert.match(buildScript, /\/base/i);
 assert.match(buildScript, /\/ahk/i);
+assert.match(buildScript, /\/icon/i);
+assert.match(buildScript, /youtube-dictation\.ico/i);
 assert.match(buildScript, /\/silent/i);
 assert.match(buildScript, /AutoHotkey64\.exe/);
 assert.match(buildScript, /Compress-Archive/);

@@ -15,6 +15,7 @@ global LOG_FILE := APP_ROOT . "\logs\control.log"
 global RUNTIME_DIR := APP_ROOT . "\runtime"
 global AHK_PID_FILE := RUNTIME_DIR . "\youtube-dictation-ahk.pid"
 global STARTUP_SHORTCUT_NAME := "YouTube Dictation Pause Control.lnk"
+global APP_ICON := APP_ROOT . "\assets\youtube-dictation.ico"
 
 SetWorkingDir(APP_ROOT)
 
@@ -476,6 +477,21 @@ ExitApplication(*) {
     ExitApp()
 }
 
+ApplyAppIcon() {
+    global APP_ICON
+    A_IconTip := "YouTube Dictation Pause Control"
+
+    try {
+        if (A_IsCompiled) {
+            TraySetIcon(A_ScriptFullPath, 1, true)
+        } else if (FileExist(APP_ICON)) {
+            TraySetIcon(APP_ICON, 1, true)
+        }
+    } catch as err {
+        LogMessage("WARNING: Failed to apply application icon: " . err.Message)
+    }
+}
+
 ConfigureTrayMenu() {
     global trayStatusLabel
     A_TrayMenu.Delete()
@@ -639,6 +655,7 @@ WritePidFile()
 OnExit(HandleAppExit)
 LogMessage("Controller started. Compiled=" . (A_IsCompiled ? "true" : "false"))
 ReadSettings()
+ApplyAppIcon()
 ConfigureTrayMenu()
 CheckAndStartServer()
 SetTimer(MonitorServerHealth, HEALTH_CHECK_INTERVAL_MS)
