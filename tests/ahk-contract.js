@@ -37,24 +37,26 @@ test('AHK reads resetHotkey from settings.json', () => {
   assert.match(ahk, /RESET_HOTKEY_RAW\s*:=\s*match\[1\]/);
 });
 
-test('reset clears both app states, aggregate state, and debounce timestamps', () => {
+test('reset clears the AHK-managed app states, aggregate state, and debounce timestamps', () => {
   const resetFunction = ahk.match(/ResetDictationState\([^)]*\)\s*\{([\s\S]*?)\n\}/);
   assert.ok(resetFunction, 'ResetDictationState function must exist');
   const body = resetFunction[1];
 
   assert.match(body, /isTypelessActive\s*:=\s*false/);
   assert.match(body, /isWisprFlowActive\s*:=\s*false/);
-  assert.match(body, /isVoiceBridgeActive\s*:=\s*false/);
+  assert.doesNotMatch(body, /isVoiceBridgeActive|voiceBridgeChordWasDown/);
   assert.match(body, /anyDictationActive\s*:=\s*false/);
   assert.match(body, /lastTypelessTick\s*:=\s*0/);
   assert.match(body, /lastWisprFlowTick\s*:=\s*0/);
-  assert.match(body, /voiceBridgeChordWasDown\s*:=\s*false/);
 });
 
-test('reset synchronizes the server to inactive', () => {
+test('reset clears every server-side input source without resetting the session', () => {
   const resetFunction = ahk.match(/ResetDictationState\([^)]*\)\s*\{([\s\S]*?)\n\}/);
   assert.ok(resetFunction, 'ResetDictationState function must exist');
-  assert.match(resetFunction[1], /SendStateToServer\(false\)/);
+  assert.match(resetFunction[1], /ResetServerState\(\)/);
+  assert.match(ahk, /ResetServerState\(\)[\s\S]+\/state/);
+  assert.match(ahk, /\"source\":\s*\"\*\"/);
+  assert.doesNotMatch(ahk.match(/ResetServerState\(\)[\s\S]*?\n\}/)[0], /\/reset/);
 });
 
 test('AHK registers the configured reset hotkey', () => {
@@ -71,19 +73,11 @@ test('Typeless uses one direct Right Ctrl + Right Shift hotkey event', () => {
   assert.doesNotMatch(ahk, /RegisterTypelessModifierHooks/);
 });
 
-test('Local Voice Bridge hold chord participates in aggregate dictation state', () => {
-  assert.match(ahk, /global\s+PHYSICAL_HOTKEY_POLL_INTERVAL_MS\s*:=\s*20/);
-  assert.match(ahk, /global\s+isVoiceBridgeActive\s*:=\s*false/);
-  assert.match(ahk, /global\s+voiceBridgeChordWasDown\s*:=\s*false/);
-  assert.match(ahk, /currentActiveState\s*:=\s*isTypelessActive\s*\|\|\s*isWisprFlowActive\s*\|\|\s*isVoiceBridgeActive/);
-});
-
-test('Local Voice Bridge monitors physical Right Ctrl and VK_OEM_102 while held', () => {
-  assert.match(ahk, /PollPhysicalHotkeys\(\)/);
-  assert.match(ahk, /GetAsyncKeyState[^\n]+0xA3/);
-  assert.match(ahk, /GetAsyncKeyState[^\n]+0xE2/);
-  assert.match(ahk, /isVoiceBridgeActive\s*:=\s*voiceBridgeChordDown/);
-  assert.match(ahk, /SetTimer\(PollPhysicalHotkeys,\s*PHYSICAL_HOTKEY_POLL_INTERVAL_MS\)/);
+test('AHK leaves Local Voice Bridge reporting to the voice-input process', () => {
+  assert.doesNotMatch(ahk, /PHYSICAL_HOTKEY_POLL_INTERVAL_MS/);
+  assert.doesNotMatch(ahk, /isVoiceBridgeActive|voiceBridgeChordWasDown/);
+  assert.doesNotMatch(ahk, /PollPhysicalHotkeys|GetAsyncKeyState|VK_OEM_102/);
+  assert.match(ahk, /currentActiveState\s*:=\s*isTypelessActive\s*\|\|\s*isWisprFlowActive/);
 });
 
 test('AHK log writes retry transient file locks', () => {
@@ -109,6 +103,13 @@ test('AHK owns a custom notification-area menu', () => {
   assert.match(ahk, /Open log/);
   assert.match(ahk, /Start with Windows/);
   assert.match(ahk, /A_TrayMenu\.Add\("Exit"/);
+});
+
+test('AHK applies a dedicated YouTube Dictation notification-area icon', () => {
+  assert.match(ahk, /global\s+APP_ICON\s*:=\s*APP_ROOT\s*\.\s*"\\assets\\youtube-dictation\.ico"/);
+  assert.match(ahk, /ApplyAppIcon\(\)/);
+  assert.match(ahk, /TraySetIcon\(/);
+  assert.match(ahk, /A_IconTip\s*:=\s*"YouTube Dictation Pause Control"/);
 });
 
 test('AHK launches Node directly and hidden instead of opening a terminal', () => {

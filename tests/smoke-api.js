@@ -8,7 +8,7 @@ const packageJson = require('../package.json');
 const ROOT = path.resolve(__dirname, '..');
 const PORT = 22000 + Math.floor(Math.random() * 20000);
 const LOG_FILE = path.join(os.tmpdir(), `youtube-dictation-pause-smoke-${process.pid}.log`);
-const API_CASE_COUNT = 14;
+const API_CASE_COUNT = 18;
 
 function request(method, route, body, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -107,24 +107,47 @@ async function main() {
     assert.strictEqual(initialState.statusCode, 200);
     assert.strictEqual(initialState.body.active, false);
     assert.strictEqual(initialState.body.sessionId, 0);
+    assert.deepStrictEqual(initialState.body.activeSources, []);
 
-    const activeState = await request('POST', '/state', { active: true, source: 'test' });
+    const activeState = await request('POST', '/state', { active: true, source: 'ahk' });
     assert.strictEqual(activeState.statusCode, 200);
     assert.strictEqual(activeState.body.active, true);
     assert.strictEqual(activeState.body.sessionId, 1);
-    assert.strictEqual(activeState.body.source, 'test');
+    assert.strictEqual(activeState.body.source, 'ahk');
+    assert.deepStrictEqual(activeState.body.activeSources, ['ahk']);
 
-    const repeatedActive = await request('POST', '/state', { active: true, source: 'test' });
+    const repeatedActive = await request('POST', '/state', { active: true, source: 'ahk' });
     assert.strictEqual(repeatedActive.body.sessionId, 1);
+
+    const localVoiceActive = await request('POST', '/state', { active: true, source: 'local-voice-bridge' });
+    assert.strictEqual(localVoiceActive.body.active, true);
+    assert.strictEqual(localVoiceActive.body.sessionId, 1);
+    assert.deepStrictEqual(localVoiceActive.body.activeSources, ['ahk', 'local-voice-bridge']);
+
+    const localVoiceInactive = await request('POST', '/state', { active: false, source: 'local-voice-bridge' });
+    assert.strictEqual(localVoiceInactive.body.active, true);
+    assert.strictEqual(localVoiceInactive.body.sessionId, 1);
+    assert.deepStrictEqual(localVoiceInactive.body.activeSources, ['ahk']);
 
     const stillActive = await request('GET', '/state');
     assert.strictEqual(stillActive.body.active, true);
     assert.strictEqual(stillActive.body.sessionId, 1);
 
-    const inactiveState = await request('POST', '/state', { active: false, source: 'test' });
+    const inactiveState = await request('POST', '/state', { active: false, source: 'ahk' });
     assert.strictEqual(inactiveState.statusCode, 200);
     assert.strictEqual(inactiveState.body.active, false);
     assert.strictEqual(inactiveState.body.sessionId, 1);
+    assert.deepStrictEqual(inactiveState.body.activeSources, []);
+
+    const localVoiceOnly = await request('POST', '/state', { active: true, source: 'local-voice-bridge' });
+    assert.strictEqual(localVoiceOnly.body.active, true);
+    assert.strictEqual(localVoiceOnly.body.sessionId, 2);
+    assert.deepStrictEqual(localVoiceOnly.body.activeSources, ['local-voice-bridge']);
+
+    const clearAllSources = await request('POST', '/state', { active: false, source: '*' });
+    assert.strictEqual(clearAllSources.body.active, false);
+    assert.strictEqual(clearAllSources.body.sessionId, 2);
+    assert.deepStrictEqual(clearAllSources.body.activeSources, []);
 
     const invalidJson = await new Promise((resolve, reject) => {
       const req = http.request({ hostname: '127.0.0.1', port: PORT, path: '/state', method: 'POST', headers: { 'Content-Type': 'application/json' } }, res => {
@@ -160,6 +183,7 @@ async function main() {
     assert.strictEqual(resetState.statusCode, 200);
     assert.strictEqual(resetState.body.active, false);
     assert.strictEqual(resetState.body.sessionId, 0);
+    assert.deepStrictEqual(resetState.body.activeSources, []);
 
     const afterReset = await request('POST', '/state', { active: true, source: 'test' });
     assert.strictEqual(afterReset.body.sessionId, 1);
