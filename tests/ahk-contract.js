@@ -105,6 +105,13 @@ test('AHK owns a custom notification-area menu', () => {
   assert.match(ahk, /A_TrayMenu\.Add\("Exit"/);
 });
 
+test('AHK applies a dedicated YouTube Dictation notification-area icon', () => {
+  assert.match(ahk, /global\s+APP_ICON\s*:=\s*APP_ROOT\s*\.\s*"\\assets\\youtube-dictation\.ico"/);
+  assert.match(ahk, /ApplyAppIcon\(\)/);
+  assert.match(ahk, /TraySetIcon\(/);
+  assert.match(ahk, /A_IconTip\s*:=\s*"YouTube Dictation Pause Control"/);
+});
+
 test('AHK launches Node directly and hidden instead of opening a terminal', () => {
   const startFunction = ahk.match(/StartOwnedServer\([^)]*\)\s*\{([\s\S]*?)\n\}/);
   assert.ok(startFunction, 'StartOwnedServer function must exist');
