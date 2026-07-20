@@ -20,7 +20,7 @@ global APP_ICON := APP_ROOT . "\assets\youtube-dictation.ico"
 SetWorkingDir(APP_ROOT)
 
 global PORT := 17654
-global TYPELESS_HOTKEY_RAW := "RightCtrl+RightShift"
+global TYPELESS_HOTKEY_RAW := "Ctrl+["
 global WISPR_FLOW_HOTKEY_RAW := "Ctrl+]"
 global RESET_HOTKEY_RAW := "Ctrl+Alt+R"
 global AUTO_START_SERVER := true
@@ -111,6 +111,21 @@ ErrorHandler(err, mode) {
     return 1
 }
 
+IsModifierOnlyHotkey(keyStr) {
+    normalized := StrReplace(keyStr, " ", "")
+    parts := StrSplit(normalized, "+")
+    if (parts.Length < 2) {
+        return false
+    }
+
+    for part in parts {
+        if (!RegExMatch(part, "i)^(?:Left|Right|L|R)?(?:Ctrl|Control|Shift|Alt|Win)$")) {
+            return false
+        }
+    }
+    return true
+}
+
 ReadSettings() {
     global SETTINGS_FILE, PORT, TYPELESS_HOTKEY_RAW, WISPR_FLOW_HOTKEY_RAW
     global RESET_HOTKEY_RAW, AUTO_START_SERVER, POLLING_INTERVAL_MS, DEBUG_MODE
@@ -122,7 +137,13 @@ ReadSettings() {
                 PORT := Integer(match[1])
             }
             if (RegExMatch(content, '"typelessHotkey"\s*:\s*"([^"]+)"', &match)) {
-                TYPELESS_HOTKEY_RAW := (match[1] = "Ctrl+Shift") ? "RightCtrl+RightShift" : match[1]
+                configuredHotkey := match[1]
+                if (IsModifierOnlyHotkey(configuredHotkey)) {
+                    TYPELESS_HOTKEY_RAW := "Ctrl+["
+                    LogMessage("WARNING: Modifier-only Typeless hotkey " . configuredHotkey . " was migrated to Ctrl+[.")
+                } else {
+                    TYPELESS_HOTKEY_RAW := configuredHotkey
+                }
             }
             if (RegExMatch(content, '"wisprFlowHotkey"\s*:\s*"([^"]+)"', &match)) {
                 WISPR_FLOW_HOTKEY_RAW := match[1]
@@ -149,10 +170,6 @@ ReadSettings() {
 }
 
 ParseHotkey(keyStr) {
-    if (keyStr = "RightCtrl+RightShift") {
-        return "RightCtrl+RightShift"
-    }
-
     res := keyStr
     res := StrReplace(res, "Ctrl+", "^")
     res := StrReplace(res, "Shift+", "+")
@@ -603,21 +620,6 @@ ResetDictationState(*) {
     }
 }
 
-TriggerTypeless(*) {
-    global isTypelessActive, lastTypelessTick, DEBOUNCE_MS
-    currentTick := A_TickCount
-    if (currentTick - lastTypelessTick < DEBOUNCE_MS) {
-        LogMessage("hotkey triggered (Typeless) - BLOCKED BY DEBOUNCE")
-        return
-    }
-    lastTypelessTick := currentTick
-
-    isTypelessActive := !isTypelessActive
-    LogMessage("hotkey triggered (Typeless). State: " . (isTypelessActive ? "ACTIVE" : "inactive"))
-    UpdateDictationStatus()
-}
-
-
 HandleTypelessKey(*) {
     global isTypelessActive, lastTypelessTick, DEBOUNCE_MS
     currentTick := A_TickCount
@@ -677,23 +679,13 @@ try {
     LogMessage("ERROR: Failed to register Wispr Flow hotkey " . passThroughWisprKey . ": " . err.Message)
 }
 
-if (TYPELESS_HOTKEY_RAW = "RightCtrl+RightShift") {
-    passThroughTypelessKey := "~>^RShift"
-    try {
-        Hotkey(passThroughTypelessKey, TriggerTypeless)
-        LogMessage("Registered Typeless hotkey: RightCtrl+RightShift via " . passThroughTypelessKey)
-    } catch as err {
-        LogMessage("ERROR: Failed to register Typeless hotkey " . passThroughTypelessKey . ": " . err.Message)
-    }
-} else {
-    parsedTypelessKey := ParseHotkey(TYPELESS_HOTKEY_RAW)
-    passThroughTypelessKey := "~" . parsedTypelessKey
-    try {
-        Hotkey(passThroughTypelessKey, HandleTypelessKey)
-        LogMessage("Registered Typeless hotkey: " . passThroughTypelessKey)
-    } catch as err {
-        LogMessage("ERROR: Failed to register Typeless hotkey " . passThroughTypelessKey . ": " . err.Message)
-    }
+parsedTypelessKey := ParseHotkey(TYPELESS_HOTKEY_RAW)
+passThroughTypelessKey := "~" . parsedTypelessKey
+try {
+    Hotkey(passThroughTypelessKey, HandleTypelessKey)
+    LogMessage("Registered Typeless hotkey: " . passThroughTypelessKey)
+} catch as err {
+    LogMessage("ERROR: Failed to register Typeless hotkey " . passThroughTypelessKey . ": " . err.Message)
 }
 
 if (DEBUG_MODE) {
