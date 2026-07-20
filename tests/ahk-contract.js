@@ -8,6 +8,7 @@ const settings = JSON.parse(fs.readFileSync(path.join(root, 'config', 'settings.
 const stopScript = fs.readFileSync(path.join(root, 'scripts', 'windows', 'stop-tracked-processes.ps1'), 'utf8');
 const startScript = fs.readFileSync(path.join(root, 'start.bat'), 'utf8');
 const backgroundStartScript = fs.readFileSync(path.join(root, 'scripts', 'windows', 'start-background.bat'), 'utf8');
+const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
 
 let caseCount = 0;
 
@@ -25,10 +26,12 @@ test('default settings expose a dedicated reset hotkey', () => {
   assert.strictEqual(settings.resetHotkey, 'Ctrl+Alt+R');
 });
 
-test('default settings use only right-side Typeless modifiers', () => {
-  assert.strictEqual(settings.typelessHotkey, 'RightCtrl+RightShift');
-  assert.match(ahk, /global\s+TYPELESS_HOTKEY_RAW\s*:=\s*"RightCtrl\+RightShift"/);
-  assert.match(ahk, /match\[1\]\s*=\s*"Ctrl\+Shift"[^\n]+"RightCtrl\+RightShift"/);
+test('default settings use Ctrl + [ for Typeless', () => {
+  assert.strictEqual(settings.typelessHotkey, 'Ctrl+[');
+  assert.match(ahk, /global\s+TYPELESS_HOTKEY_RAW\s*:=\s*"Ctrl\+\["/);
+  assert.match(ahk, /IsModifierOnlyHotkey\(keyStr\)/);
+  assert.match(ahk, /IsModifierOnlyHotkey\(configuredHotkey\)/);
+  assert.match(ahk, /TYPELESS_HOTKEY_RAW\s*:=\s*"Ctrl\+\["/);
 });
 
 test('AHK reads resetHotkey from settings.json', () => {
@@ -64,13 +67,18 @@ test('AHK registers the configured reset hotkey', () => {
   assert.match(ahk, /Hotkey\(parsedResetKey,\s*ResetDictationState\)/);
 });
 
-test('Typeless uses one direct Right Ctrl + Right Shift hotkey event', () => {
-  assert.match(ahk, /passThroughTypelessKey\s*:=\s*"~>\^RShift"/);
-  assert.match(ahk, /Hotkey\(passThroughTypelessKey,\s*TriggerTypeless\)/);
-  assert.match(ahk, /TriggerTypeless\(\*\)/);
-  assert.doesNotMatch(ahk, /typelessChordArmed/);
-  assert.doesNotMatch(ahk, /HandleTypelessModifierDown/);
-  assert.doesNotMatch(ahk, /RegisterTypelessModifierHooks/);
+test('Typeless uses the same ordinary-key registration pattern as Wispr Flow', () => {
+  assert.match(ahk, /parsedTypelessKey\s*:=\s*ParseHotkey\(TYPELESS_HOTKEY_RAW\)/);
+  assert.match(ahk, /passThroughTypelessKey\s*:=\s*"~"\s*\.\s*parsedTypelessKey/);
+  assert.match(ahk, /Hotkey\(passThroughTypelessKey,\s*HandleTypelessKey\)/);
+  assert.doesNotMatch(ahk, /~>\^RShift/);
+  assert.doesNotMatch(ahk, /TriggerTypeless/);
+});
+
+test('README rejects modifier-only dictation hotkeys', () => {
+  assert.match(readme, /通常キーを1つ含めてください/);
+  assert.match(readme, /修飾キーだけの組み合わせ/);
+  assert.match(readme, /Ctrl \+ Shift/);
 });
 
 test('AHK leaves Local Voice Bridge reporting to the voice-input process', () => {
