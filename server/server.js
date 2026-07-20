@@ -115,11 +115,14 @@ function setCorsHeaders(req, res) {
   return true;
 }
 
+const activeSources = new Set();
+
 let state = {
   active: false,
   sessionId: 0,
   updatedAt: new Date().toISOString(),
-  source: 'ahk'
+  source: 'ahk',
+  activeSources: []
 };
 
 const server = http.createServer((req, res) => {
@@ -161,20 +164,30 @@ const server = http.createServer((req, res) => {
       try {
         const payload = JSON.parse(body || '{}');
         const nextActive = !!payload.active;
-        const source = payload.source || 'ahk';
+        const source = String(payload.source || 'ahk').trim() || 'ahk';
         const prevActive = state.active;
 
-        logMessage(`POST /state active=${nextActive}`);
+        if (!nextActive && source === '*') {
+          activeSources.clear();
+        } else if (nextActive) {
+          activeSources.add(source);
+        } else {
+          activeSources.delete(source);
+        }
 
-        if (prevActive === false && nextActive === true) {
+        const nextAggregateActive = activeSources.size > 0;
+        logMessage(`POST /state source=${source} active=${nextActive} aggregate=${nextAggregateActive}`);
+
+        if (prevActive === false && nextAggregateActive === true) {
           state.sessionId += 1;
           logMessage('state changed inactive -> active');
-        } else if (prevActive === true && nextActive === false) {
+        } else if (prevActive === true && nextAggregateActive === false) {
           logMessage('state changed active -> inactive');
         }
 
-        state.active = nextActive;
+        state.active = nextAggregateActive;
         state.source = source;
+        state.activeSources = Array.from(activeSources).sort();
         state.updatedAt = new Date().toISOString();
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -190,10 +203,12 @@ const server = http.createServer((req, res) => {
 
   if (method === 'POST' && url === '/reset') {
     logMessage('POST /reset');
+    activeSources.clear();
     state.active = false;
     state.sessionId = 0;
     state.updatedAt = new Date().toISOString();
     state.source = 'api';
+    state.activeSources = [];
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(state));
     return;

@@ -119,7 +119,8 @@ $portableLauncher = Join-Path $ahkToolsDir 'AutoHotkey.exe'
 Copy-Item -LiteralPath $baseExecutable -Destination $portableLauncher -Force
 $ahk2ExePath = Join-Path $compilerDir 'Ahk2Exe.exe'
 $inputScript = Join-Path $rootDir 'ahk\youtube-dictation-control.ahk'
-foreach ($requiredTool in @($baseExecutable, $ahk2ExePath, $inputScript)) {
+$appIcon = Join-Path $rootDir 'assets\youtube-dictation.ico'
+foreach ($requiredTool in @($baseExecutable, $ahk2ExePath, $inputScript, $appIcon)) {
     if (-not (Test-Path -LiteralPath $requiredTool)) {
         throw "Required build input is missing: $requiredTool"
     }
@@ -143,6 +144,7 @@ $compileArguments = @(
     '/out', ('"{0}"' -f $outputExecutable),
     '/base', ('"{0}"' -f $baseExecutable),
     '/ahk', ('"{0}"' -f $baseExecutable),
+    '/icon', ('"{0}"' -f $appIcon),
     '/silent', 'verbose'
 )
 $compileStdout = Join-Path $cacheDir 'ahk2exe.stdout.log'
