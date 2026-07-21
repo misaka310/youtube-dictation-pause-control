@@ -12,7 +12,8 @@
     "test:extension": "node tests/extension-content.js",
     "test:background": "node tests/extension-background.js",
     "test:runtime": "node tests/log-writer.js && node tests/ahk-contract.js",
-    "test:release": "node tests/release-contract.js"
+    "test:release": "node tests/release-contract.js",
+    "test:gui:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows/run-gui-smoke.ps1"
   },
   "engines": {
     "node": ">=22"
