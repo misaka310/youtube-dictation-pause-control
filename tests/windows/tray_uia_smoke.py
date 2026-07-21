@@ -114,9 +114,13 @@ def owned_server_processes() -> list[psutil.Process]:
 
 def launch_app() -> psutil.Process:
     subprocess.Popen([str(EXE)], cwd=PACKAGE_ROOT)
+    def find_one_controller():
+        found = controller_processes()
+        return found if len(found) == 1 else None
+
     rows = wait_until(
         "one compiled controller process",
-        lambda: (found := controller_processes()) if len(found) == 1 else None,
+        find_one_controller,
         timeout=15,
     )
     return rows[0]
@@ -125,9 +129,13 @@ def launch_app() -> psutil.Process:
 def relaunch_single_instance() -> psutil.Process:
     subprocess.Popen([str(EXE)], cwd=PACKAGE_ROOT)
     time.sleep(2)
+    def find_one_controller():
+        found = controller_processes()
+        return found if len(found) == 1 else None
+
     rows = wait_until(
         "one controller after duplicate launch",
-        lambda: (found := controller_processes()) if len(found) == 1 else None,
+        find_one_controller,
         timeout=10,
     )
     return rows[0]
@@ -175,7 +183,9 @@ def open_hidden_icons_if_needed() -> None:
 
 
 def find_tray_button():
-    predicate = lambda text: text.casefold().startswith(APP_NAME.casefold())
+    def predicate(text: str) -> bool:
+        return text.casefold().startswith(APP_NAME.casefold())
+
     button = find_button(candidate_scopes(), predicate)
     if button is not None:
         return button
