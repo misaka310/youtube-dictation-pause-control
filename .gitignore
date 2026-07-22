@@ -19,6 +19,9 @@ yarn-error.log*
 coverage/
 dist/
 .build-cache/
+test-results/
+__pycache__/
+*.pyc
 
 # Local user config
 config/settings.json
