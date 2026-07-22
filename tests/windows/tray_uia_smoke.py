@@ -227,7 +227,7 @@ def open_hidden_icons_if_needed() -> None:
 
 def find_tray_button():
     def predicate(text: str) -> bool:
-        return text.casefold().startswith(APP_NAME.casefold())
+        return APP_NAME.casefold() in text.casefold()
 
     button = find_named_control(candidate_scopes(), predicate)
     if button is not None:
