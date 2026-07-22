@@ -17,22 +17,11 @@ The normal CI suite verifies JavaScript, AutoHotkey contracts, API behavior, rel
 
 The test checks that **Start with Windows** exists and is enabled, but it deliberately does not change the test account's startup shortcut.
 
-## Self-hosted runner
+## GitHub-hosted runner
 
-Run this only on a dedicated Windows 11 VM or test machine. The runner must:
+This public repository runs the GUI smoke on GitHub-hosted `windows-latest`, so it does not consume private-repository Actions minutes or require the 74 self-hosted VM. The job runs for pull requests and can also be started with `workflow_dispatch`.
 
-- be started in a logged-in interactive desktop session, not as a Session 0 service;
-- have the labels `self-hosted`, `windows`, `x64`, and `gui-automation`;
-- allow the runner account to interact with the Windows taskbar;
-- have no copy of the same packaged controller already running.
-
-The workflow is committed before the runner is ready without leaving PR checks queued. Pull-request runs are enabled by setting the repository variable:
-
-```text
-GUI_SELF_HOSTED_ENABLED=true
-```
-
-An explicit first run can be started with `workflow_dispatch` after the runner is registered.
+The smoke still requires an interactive Windows desktop. The test fails explicitly when the runner session is non-interactive, when another packaged controller is already running, or when UI Automation cannot reach the notification-area menu.
 
 ## Results
 
