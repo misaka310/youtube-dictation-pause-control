@@ -113,6 +113,11 @@ test('AHK owns a custom notification-area menu', () => {
   assert.match(ahk, /A_TrayMenu\.Add\("Exit"/);
 });
 
+test('duplicate launch keeps the existing tray process', () => {
+  assert.match(ahk, /#SingleInstance\s+Ignore/);
+  assert.doesNotMatch(ahk, /#SingleInstance\s+Force/);
+});
+
 test('AHK applies a dedicated YouTube Dictation notification-area icon', () => {
   assert.match(ahk, /global\s+APP_ICON\s*:=\s*APP_ROOT\s*\.\s*"\\assets\\youtube-dictation\.ico"/);
   assert.match(ahk, /ApplyAppIcon\(\)/);
