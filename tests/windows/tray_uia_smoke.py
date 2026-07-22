@@ -296,18 +296,23 @@ def menu_items(wrapper) -> dict[str, object]:
     return result
 
 
+def validated_menu_items(wrapper) -> dict[str, object]:
+    items = menu_items(wrapper)
+    if not any(title.startswith("Status: ") for title in items):
+        raise AssertionError(f"status item missing: {sorted(items)}")
+    missing = [title for title in EXPECTED_ACTIONS if title not in items]
+    if missing:
+        raise AssertionError(f"missing menu actions: {missing}; actual={sorted(items)}")
+    disabled = [title for title in EXPECTED_ACTIONS if not items[title].is_enabled()]
+    if disabled:
+        raise AssertionError(f"unexpected disabled actions: {disabled}")
+    return items
+
+
 def assert_menu_contract(pid: int) -> None:
     popup, wrapper = open_menu(pid)
     try:
-        items = menu_items(wrapper)
-        if not any(title.startswith("Status: ") for title in items):
-            raise AssertionError(f"status item missing: {sorted(items)}")
-        missing = [title for title in EXPECTED_ACTIONS if title not in items]
-        if missing:
-            raise AssertionError(f"missing menu actions: {missing}; actual={sorted(items)}")
-        disabled = [title for title in EXPECTED_ACTIONS if not items[title].is_enabled()]
-        if disabled:
-            raise AssertionError(f"unexpected disabled actions: {disabled}")
+        validated_menu_items(wrapper)
     finally:
         close_popup(popup.hwnd)
 
@@ -367,9 +372,7 @@ def verify_open_log(pid: int) -> None:
     USER32.PostMessageW(row.hwnd, WM_CLOSE, 0, 0)
 
 
-def verify_exit(pid: int) -> None:
-    server_pids = {process.pid for process in owned_server_processes()}
-    click_menu_item(pid, "Exit")
+def wait_for_clean_exit(server_pids: set[int]) -> None:
     wait_until("controller exit", lambda: not controller_processes(), timeout=15)
     wait_until(
         "owned Node bridge exit",
@@ -378,6 +381,21 @@ def verify_exit(pid: int) -> None:
     )
     open_hidden_icons_if_needed()
     wait_until("tray icon removal", lambda: find_existing_tray_button() is None, timeout=10)
+
+
+def verify_exit(pid: int) -> None:
+    server_pids = {process.pid for process in owned_server_processes()}
+    click_menu_item(pid, "Exit")
+    wait_for_clean_exit(server_pids)
+
+
+def verify_menu_contract_and_exit(pid: int) -> None:
+    server_pids = {process.pid for process in owned_server_processes()}
+    popup, wrapper = open_menu(pid)
+    items = validated_menu_items(wrapper)
+    items["Exit"].click_input()
+    wait_until("tray menu to close", lambda: not USER32.IsWindow(popup.hwnd), timeout=5)
+    wait_for_clean_exit(server_pids)
 
 
 def control_snapshot(control) -> dict[str, object]:
@@ -514,8 +532,11 @@ def main() -> int:
         run_scenario(results, "clean exit", lambda: verify_exit(pid))
 
         second = launch_app()
-        run_scenario(results, "second launch remains operable", lambda: assert_menu_contract(second.pid))
-        run_scenario(results, "second clean exit", lambda: verify_exit(second.pid))
+        run_scenario(
+            results,
+            "second launch remains operable and exits cleanly",
+            lambda: verify_menu_contract_and_exit(second.pid),
+        )
         save_result(results)
         return 0
     except Exception as exc:
