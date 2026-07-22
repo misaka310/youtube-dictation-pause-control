@@ -211,7 +211,12 @@ def find_named_control(scopes: Iterable[object], predicate: Callable[[str], bool
 
 
 def open_hidden_icons_if_needed() -> None:
-    taskbar = Desktop(backend="uia").window(class_name="Shell_TrayWnd")
+    desktop = Desktop(backend="uia")
+    for class_name in ("TopLevelWindowForOverflowXamlIsland", "NotifyIconOverflowWindow"):
+        if any(window.is_visible() for window in desktop.windows(class_name=class_name)):
+            return
+
+    taskbar = desktop.window(class_name="Shell_TrayWnd")
     if not taskbar.exists(timeout=2):
         raise RuntimeError("Windows taskbar was not found; use a logged-in interactive runner session")
 
@@ -225,17 +230,22 @@ def open_hidden_icons_if_needed() -> None:
         time.sleep(0.7)
 
 
-def find_tray_button():
-    def predicate(text: str) -> bool:
-        return APP_NAME.casefold() in text.casefold()
+def tray_name_matches(text: str) -> bool:
+    return APP_NAME.casefold() in text.casefold()
 
-    button = find_named_control(candidate_scopes(), predicate)
+
+def find_existing_tray_button():
+    return find_named_control(candidate_scopes(), tray_name_matches)
+
+
+def find_tray_button():
+    button = find_existing_tray_button()
     if button is not None:
         return button
     open_hidden_icons_if_needed()
     return wait_until(
         f"{APP_NAME} tray icon",
-        lambda: find_named_control(candidate_scopes(), predicate),
+        find_existing_tray_button,
         timeout=15,
     )
 
@@ -354,6 +364,8 @@ def verify_exit(pid: int) -> None:
         lambda: not any(psutil.pid_exists(server_pid) for server_pid in server_pids),
         timeout=10,
     )
+    open_hidden_icons_if_needed()
+    wait_until("tray icon removal", lambda: find_existing_tray_button() is None, timeout=10)
 
 
 def control_snapshot(control) -> dict[str, object]:
