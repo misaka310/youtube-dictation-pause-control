@@ -143,25 +143,68 @@ def relaunch_single_instance() -> psutil.Process:
 
 def candidate_scopes() -> Iterable[object]:
     desktop = Desktop(backend="uia")
+    seen_handles: set[int] = set()
+
+    def add_scope(window):
+        try:
+            handle = int(window.handle)
+            if handle in seen_handles or not window.is_visible():
+                return None
+            seen_handles.add(handle)
+            return window
+        except Exception:
+            return None
+
     taskbar = desktop.window(class_name="Shell_TrayWnd")
     if taskbar.exists(timeout=1):
-        yield taskbar
-    for class_name in ("TopLevelWindowForOverflowXamlIsland", "NotifyIconOverflowWindow"):
-        window = desktop.window(class_name=class_name)
-        if window.exists(timeout=0.5) and window.is_visible():
-            yield window
+        scope = add_scope(taskbar)
+        if scope is not None:
+            yield scope
+
+    for class_name in (
+        "TopLevelWindowForOverflowXamlIsland",
+        "NotifyIconOverflowWindow",
+        "Windows.UI.Core.CoreWindow",
+        "XamlExplorerHostIslandWindow",
+    ):
+        for window in desktop.windows(class_name=class_name):
+            scope = add_scope(window)
+            if scope is not None:
+                yield scope
+
+    for row in enum_top_windows():
+        marker = f"{row.class_name} {row.title}".casefold()
+        if not any(token in marker for token in ("tray", "notify", "overflow", "xaml")):
+            continue
+        scope = add_scope(desktop.window(handle=row.hwnd))
+        if scope is not None:
+            yield scope
 
 
-def find_button(scopes: Iterable[object], predicate: Callable[[str], bool]):
-    for scope in scopes:
+def element_name(element) -> str:
+    for getter in (
+        lambda: element.window_text(),
+        lambda: element.element_info.name,
+    ):
         try:
-            buttons = scope.descendants(control_type="Button")
+            value = str(getter() or "").strip()
+            if value:
+                return value
         except Exception:
             continue
-        for button in buttons:
+    return ""
+
+
+def find_named_control(scopes: Iterable[object], predicate: Callable[[str], bool]):
+    for scope in scopes:
+        try:
+            controls = scope.descendants()
+        except Exception:
+            continue
+        for control in controls:
             try:
-                if predicate(button.window_text().strip()):
-                    return button
+                if predicate(element_name(control)):
+                    return control
             except Exception:
                 continue
     return None
@@ -176,7 +219,7 @@ def open_hidden_icons_if_needed() -> None:
         lowered = text.casefold()
         return "hidden icon" in lowered or "show hidden" in lowered or "非表示のアイコン" in text
 
-    button = find_button((taskbar,), predicate)
+    button = find_named_control((taskbar,), predicate)
     if button is not None:
         button.click_input()
         time.sleep(0.7)
@@ -186,14 +229,14 @@ def find_tray_button():
     def predicate(text: str) -> bool:
         return text.casefold().startswith(APP_NAME.casefold())
 
-    button = find_button(candidate_scopes(), predicate)
+    button = find_named_control(candidate_scopes(), predicate)
     if button is not None:
         return button
     open_hidden_icons_if_needed()
     return wait_until(
         f"{APP_NAME} tray icon",
-        lambda: find_button(candidate_scopes(), predicate),
-        timeout=8,
+        lambda: find_named_control(candidate_scopes(), predicate),
+        timeout=15,
     )
 
 
@@ -313,12 +356,73 @@ def verify_exit(pid: int) -> None:
     )
 
 
+def control_snapshot(control) -> dict[str, object]:
+    info = control.element_info
+    rectangle = getattr(info, "rectangle", None)
+    return {
+        "name": element_name(control),
+        "controlType": str(getattr(info, "control_type", "") or ""),
+        "className": str(getattr(info, "class_name", "") or ""),
+        "automationId": str(getattr(info, "automation_id", "") or ""),
+        "rectangle": (
+            {
+                "left": int(rectangle.left),
+                "top": int(rectangle.top),
+                "right": int(rectangle.right),
+                "bottom": int(rectangle.bottom),
+            }
+            if rectangle is not None
+            else None
+        ),
+    }
+
+
+def save_uia_diagnostics() -> None:
+    diagnostics: dict[str, object] = {
+        "sessionName": os.environ.get("SESSIONNAME", ""),
+        "scopes": [],
+        "topWindows": [],
+    }
+    scope_rows: list[dict[str, object]] = []
+    for scope in candidate_scopes():
+        try:
+            descendants = scope.descendants()
+            scope_rows.append(
+                {
+                    "scope": control_snapshot(scope),
+                    "descendants": [control_snapshot(control) for control in descendants[:500]],
+                    "truncated": len(descendants) > 500,
+                }
+            )
+        except Exception as exc:
+            scope_rows.append({"error": f"{type(exc).__name__}: {exc}"})
+    diagnostics["scopes"] = scope_rows
+
+    diagnostics["topWindows"] = [
+        asdict(row)
+        for row in enum_top_windows()
+        if row.pid == os.getpid()
+        or any(
+            token in f"{row.class_name} {row.title}".casefold()
+            for token in ("shell", "tray", "notify", "overflow", "xaml")
+        )
+    ][:500]
+    (RESULT_DIR / "uia-diagnostics.json").write_text(
+        json.dumps(diagnostics, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 def save_result(results: list[ScenarioResult], error: BaseException | None = None) -> None:
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     payload = {"ok": error is None, "results": [asdict(result) for result in results]}
     if error is not None:
         payload["error"] = f"{type(error).__name__}: {error}"
         payload["traceback"] = traceback.format_exc()
+        try:
+            save_uia_diagnostics()
+        except Exception as diagnostic_error:
+            payload["uiaDiagnosticsError"] = f"{type(diagnostic_error).__name__}: {diagnostic_error}"
         try:
             ImageGrab.grab(all_screens=True).save(RESULT_DIR / "failure.png")
         except Exception:
