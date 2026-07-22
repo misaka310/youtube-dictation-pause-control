@@ -126,17 +126,17 @@ def launch_app() -> psutil.Process:
     return rows[0]
 
 
-def relaunch_single_instance() -> psutil.Process:
+def relaunch_single_instance(original_pid: int) -> psutil.Process:
     subprocess.Popen([str(EXE)], cwd=PACKAGE_ROOT)
-    time.sleep(2)
-    def find_one_controller():
+
+    def find_replacement_controller():
         found = controller_processes()
-        return found if len(found) == 1 else None
+        return found if len(found) == 1 and found[0].pid != original_pid else None
 
     rows = wait_until(
-        "one controller after duplicate launch",
-        find_one_controller,
-        timeout=10,
+        "replacement controller after duplicate launch",
+        find_replacement_controller,
+        timeout=15,
     )
     return rows[0]
 
@@ -484,7 +484,7 @@ def main() -> int:
         replacement: list[psutil.Process] = []
 
         def duplicate_launch() -> None:
-            replacement.append(relaunch_single_instance())
+            replacement.append(relaunch_single_instance(pid))
 
         run_scenario(results, "single tray instance after duplicate launch", duplicate_launch)
         pid = replacement[0].pid
