@@ -266,15 +266,25 @@ def find_popup(pid: int) -> WindowInfo | None:
 def close_popup(hwnd: int) -> None:
     if USER32.IsWindow(hwnd):
         USER32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
-        time.sleep(0.2)
+        wait_until("tray menu to close", lambda: not USER32.IsWindow(hwnd), timeout=3)
 
 
 def open_menu(pid: int):
-    find_tray_button().click_input(button="right")
-    popup = wait_until("AutoHotkey tray menu", lambda: find_popup(pid), timeout=5)
-    wrapper = Desktop(backend="uia").window(handle=popup.hwnd)
-    wait_until("tray menu items", lambda: wrapper.descendants(control_type="MenuItem"), timeout=3)
-    return popup, wrapper
+    last_error: Exception | None = None
+    for _attempt in range(3):
+        existing = find_popup(pid)
+        if existing is not None:
+            close_popup(existing.hwnd)
+        try:
+            find_tray_button().click_input(button="right")
+            popup = wait_until("AutoHotkey tray menu", lambda: find_popup(pid), timeout=5)
+            wrapper = Desktop(backend="uia").window(handle=popup.hwnd)
+            wait_until("tray menu items", lambda: wrapper.descendants(control_type="MenuItem"), timeout=3)
+            return popup, wrapper
+        except TimeoutError as exc:
+            last_error = exc
+            time.sleep(0.7)
+    raise last_error or TimeoutError("Timed out waiting for AutoHotkey tray menu")
 
 
 def menu_items(wrapper) -> dict[str, object]:
