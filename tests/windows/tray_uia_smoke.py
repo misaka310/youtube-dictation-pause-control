@@ -212,12 +212,24 @@ def find_named_control(scopes: Iterable[object], predicate: Callable[[str], bool
     return None
 
 
-def open_hidden_icons_if_needed() -> None:
-    desktop = Desktop(backend="uia")
-    for class_name in ("TopLevelWindowForOverflowXamlIsland", "NotifyIconOverflowWindow"):
-        if any(window.is_visible() for window in desktop.windows(class_name=class_name)):
-            return
+HIDDEN_ICON_CLASSES = ("TopLevelWindowForOverflowXamlIsland", "NotifyIconOverflowWindow")
 
+
+def visible_hidden_icon_windows() -> list[object]:
+    desktop = Desktop(backend="uia")
+    windows: list[object] = []
+    for class_name in HIDDEN_ICON_CLASSES:
+        for window in desktop.windows(class_name=class_name):
+            try:
+                if window.is_visible():
+                    windows.append(window)
+            except Exception:
+                continue
+    return windows
+
+
+def open_hidden_icons_if_needed(force_refresh: bool = False) -> None:
+    desktop = Desktop(backend="uia")
     taskbar = desktop.window(class_name="Shell_TrayWnd")
     if not taskbar.exists(timeout=2):
         raise RuntimeError("Windows taskbar was not found; use a logged-in interactive runner session")
@@ -227,9 +239,28 @@ def open_hidden_icons_if_needed() -> None:
         return "hidden icon" in lowered or "show hidden" in lowered or "非表示のアイコン" in text
 
     button = find_named_control((taskbar,), predicate)
-    if button is not None:
+    visible = visible_hidden_icon_windows()
+    if visible and not force_refresh:
+        return
+    if button is None:
+        if visible:
+            return
+        raise RuntimeError("Windows hidden-icons button was not found")
+
+    if visible and force_refresh:
         button.click_input()
-        time.sleep(0.7)
+        wait_until(
+            "hidden icons overflow to close",
+            lambda: not visible_hidden_icon_windows(),
+            timeout=4,
+        )
+
+    button.click_input()
+    wait_until(
+        "hidden icons overflow",
+        visible_hidden_icon_windows,
+        timeout=5,
+    )
 
 
 def tray_name_matches(text: str) -> bool:
@@ -240,17 +271,17 @@ def find_existing_tray_button():
     return find_named_control(candidate_scopes(), tray_name_matches)
 
 
-def find_tray_button():
-    button = find_existing_tray_button()
-    if button is not None:
-        return button
-    open_hidden_icons_if_needed()
+def find_tray_button(force_refresh: bool = False):
+    if not force_refresh:
+        button = find_existing_tray_button()
+        if button is not None:
+            return button
+    open_hidden_icons_if_needed(force_refresh=force_refresh)
     return wait_until(
         f"{APP_NAME} tray icon",
         find_existing_tray_button,
         timeout=15,
     )
-
 
 def find_popup(pid: int) -> WindowInfo | None:
     return next(
@@ -271,21 +302,26 @@ def close_popup(hwnd: int) -> None:
 
 def open_menu(pid: int):
     last_error: Exception | None = None
-    for _attempt in range(3):
+    for attempt in range(5):
         existing = find_popup(pid)
         if existing is not None:
             close_popup(existing.hwnd)
         try:
-            find_tray_button().click_input(button="right")
-            popup = wait_until("AutoHotkey tray menu", lambda: find_popup(pid), timeout=5)
+            button = find_tray_button(force_refresh=attempt > 0)
+            try:
+                button.set_focus()
+            except Exception:
+                pass
+            time.sleep(0.25)
+            button.click_input(button="right")
+            popup = wait_until("AutoHotkey tray menu", lambda: find_popup(pid), timeout=7)
             wrapper = Desktop(backend="uia").window(handle=popup.hwnd)
-            wait_until("tray menu items", lambda: wrapper.descendants(control_type="MenuItem"), timeout=3)
+            wait_until("tray menu items", lambda: wrapper.descendants(control_type="MenuItem"), timeout=4)
             return popup, wrapper
-        except TimeoutError as exc:
+        except (TimeoutError, RuntimeError) as exc:
             last_error = exc
-            time.sleep(0.7)
+            time.sleep(0.8)
     raise last_error or TimeoutError("Timed out waiting for AutoHotkey tray menu")
-
 
 def menu_items(wrapper) -> dict[str, object]:
     result: dict[str, object] = {}
@@ -455,12 +491,39 @@ def save_uia_diagnostics() -> None:
     )
 
 
+def process_snapshots(processes: Iterable[psutil.Process]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for process in processes:
+        try:
+            rows.append(
+                {
+                    "pid": process.pid,
+                    "ppid": process.ppid(),
+                    "name": process.name(),
+                    "exe": process.exe(),
+                    "cmdline": process.cmdline(),
+                    "status": process.status(),
+                    "createTime": process.create_time(),
+                }
+            )
+        except (psutil.AccessDenied, psutil.NoSuchProcess, OSError) as exc:
+            rows.append({"pid": process.pid, "error": f"{type(exc).__name__}: {exc}"})
+    return rows
+
+
 def save_result(results: list[ScenarioResult], error: BaseException | None = None) -> None:
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     payload = {"ok": error is None, "results": [asdict(result) for result in results]}
     if error is not None:
         payload["error"] = f"{type(error).__name__}: {error}"
         payload["traceback"] = traceback.format_exc()
+        payload["controllerProcesses"] = process_snapshots(controller_processes())
+        payload["ownedServerProcesses"] = process_snapshots(owned_server_processes())
+        if LOG_FILE.exists():
+            try:
+                payload["logTail"] = LOG_FILE.read_text(encoding="utf-8-sig", errors="replace")[-16000:]
+            except OSError as log_error:
+                payload["logReadError"] = f"{type(log_error).__name__}: {log_error}"
         try:
             save_uia_diagnostics()
         except Exception as diagnostic_error:

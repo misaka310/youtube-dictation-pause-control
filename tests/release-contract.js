@@ -5,6 +5,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const buildScriptPath = path.join(root, 'scripts', 'windows', 'build-release.ps1');
 const runtimeVerifierPath = path.join(root, 'scripts', 'windows', 'verify-release-runtime.ps1');
+const guiSmokeRunnerPath = path.join(root, 'scripts', 'windows', 'run-gui-smoke.ps1');
 const releaseTagValidatorPath = path.join(root, 'scripts', 'windows', 'validate-release-tag.ps1');
 const noticesPath = path.join(root, 'THIRD_PARTY_NOTICES.md');
 const gplPath = path.join(root, 'licenses', 'AutoHotkey-GPL-2.0.txt');
@@ -21,6 +22,7 @@ const appIconPath = path.join(root, 'assets', 'youtube-dictation.ico');
 for (const [filePath, message] of [
   [buildScriptPath, 'build-release.ps1 must exist'],
   [runtimeVerifierPath, 'verify-release-runtime.ps1 must exist'],
+  [guiSmokeRunnerPath, 'run-gui-smoke.ps1 must exist'],
   [releaseTagValidatorPath, 'validate-release-tag.ps1 must exist'],
   [noticesPath, 'THIRD_PARTY_NOTICES.md must exist'],
   [gplPath, 'AutoHotkey GPL-2.0 license text must exist'],
@@ -39,6 +41,7 @@ for (const [filePath, message] of [
 
 const buildScript = fs.readFileSync(buildScriptPath, 'utf8');
 const runtimeVerifier = fs.readFileSync(runtimeVerifierPath, 'utf8');
+const guiSmokeRunner = fs.readFileSync(guiSmokeRunnerPath, 'utf8');
 const releaseTagValidator = fs.readFileSync(releaseTagValidatorPath, 'utf8');
 const notices = fs.readFileSync(noticesPath, 'utf8');
 const gpl = fs.readFileSync(gplPath, 'utf8');
@@ -73,6 +76,11 @@ assert.match(buildScript, /youtube-dictation\.ico/i);
 assert.match(buildScript, /\/silent/i);
 assert.match(buildScript, /AutoHotkey64\.exe/);
 assert.match(buildScript, /Compress-Archive/);
+assert.match(buildScript, /function\s+Remove-PathWithRetry/);
+assert.match(buildScript, /for \(\$attempt = 1; \$attempt -le 10; \$attempt\+\+\)/);
+assert.match(buildScript, /Remove-Item\s+-LiteralPath\s+\$Path\s+-Force\s+-Recurse:\$Recurse\s+-ErrorAction\s+Stop/);
+assert.match(buildScript, /Remove-PathWithRetry\s+-Path\s+\$stageDir\s+-Recurse/);
+assert.match(buildScript, /Remove-PathWithRetry\s+-Path\s+\$zipPath\s+-Description\s+'release ZIP'/);
 
 for (const requiredEntry of [
   'YouTubeDictationControl.exe',
@@ -111,6 +119,15 @@ assert.match(runtimeVerifier, /Wait-NewListenerProcessId/);
 assert.match(runtimeVerifier, /Stop-Process\s+-Id\s+\$initialServerPid\s+-Force/);
 assert.match(runtimeVerifier, /ownedShutdownVerified\s*=\s*\$true/);
 assert.match(runtimeVerifier, /WindowCloser/);
+
+assert.match(guiSmokeRunner, /function\s+Invoke-NativeChecked/);
+assert.match(guiSmokeRunner, /Start-Process/);
+assert.match(guiSmokeRunner, /\.ExitCode/);
+assert.match(guiSmokeRunner, /gui-smoke-package-\{0\}/);
+assert.match(guiSmokeRunner, /-OutputDirectory\s+\$packageOutput/);
+assert.match(guiSmokeRunner, /finally\s*\{/);
+assert.match(guiSmokeRunner, /Remove-DirectoryBestEffort\s+-Path\s+\$packageOutput/);
+assert.doesNotMatch(guiSmokeRunner, /\$LASTEXITCODE/);
 
 assert.match(ci, /npm test/);
 assert.match(ci, /build-release\.ps1/);
