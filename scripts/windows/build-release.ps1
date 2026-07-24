@@ -37,6 +37,36 @@ $stageName = "YouTubeDictationPauseControl-$projectVersion"
 $stageDir = Join-Path $distDir $stageName
 $zipPath = Join-Path $distDir "$stageName-windows-x64.zip"
 
+function Remove-PathWithRetry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [switch]$Recurse,
+        [string]$Description = 'path'
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    for ($attempt = 1; $attempt -le 10; $attempt++) {
+        try {
+            Remove-Item -LiteralPath $Path -Force -Recurse:$Recurse -ErrorAction Stop
+        } catch {
+            if ($attempt -ge 10) {
+                throw "Existing $Description could not be replaced: $Path. $($_.Exception.Message)"
+            }
+        }
+
+        if (-not (Test-Path -LiteralPath $Path)) {
+            return
+        }
+        Start-Sleep -Milliseconds (250 * $attempt)
+    }
+
+    throw "Existing $Description could not be replaced: $Path"
+}
+
 function Get-VerifiedDownload {
     param(
         [Parameter(Mandatory = $true)]
@@ -134,7 +164,7 @@ if ($validationProcess.ExitCode -ne 0) {
 }
 
 if (Test-Path -LiteralPath $stageDir) {
-    Remove-Item -LiteralPath $stageDir -Recurse -Force
+    Remove-PathWithRetry -Path $stageDir -Recurse -Description 'release staging directory'
 }
 New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
 $outputExecutable = Join-Path $stageDir 'YouTubeDictationControl.exe'
@@ -226,7 +256,7 @@ foreach ($relativePath in $prohibitedEntries) {
     }
 }
 
-Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
+Remove-PathWithRetry -Path $zipPath -Description 'release ZIP'
 Compress-Archive -LiteralPath $stageDir -DestinationPath $zipPath -CompressionLevel Optimal
 if (-not (Test-Path -LiteralPath $zipPath) -or (Get-Item -LiteralPath $zipPath).Length -le 0) {
     throw 'Release ZIP was not created.'
@@ -236,5 +266,5 @@ Write-Host "Built executable: $outputExecutable"
 Write-Host "Built release ZIP: $zipPath"
 
 if (-not $KeepStaging) {
-    Remove-Item -LiteralPath $stageDir -Recurse -Force
+    Remove-PathWithRetry -Path $stageDir -Recurse -Description 'release staging directory'
 }
