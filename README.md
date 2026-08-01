@@ -5,6 +5,9 @@
 
 Windowsで音声入力中だけYouTubeを自動一時停止するローカル補助ツールです。通知領域常駐EXEがTypeless／Wispr Flowの操作を検知し、対応するLocal Voice Bridgeは録音状態をローカルHTTP Bridgeへ直接通知します。BraveなどのChromium系ブラウザのYouTubeタブだけを拡張機能から制御します。
 
+> **非公式・非提携について**
+> このプロジェクトは独立して開発された非公式ツールであり、Google、YouTube、Typeless、Wispr Flowの公式製品、提携製品、承認製品、スポンサー製品ではありません。各製品名・サービス名・商標は各権利者に帰属します。
+
 配布ZIPにはAutoHotkey v2ランタイムを組み込んだ`YouTubeDictationControl.exe`とNode.jsランタイムが含まれるため、利用者がAutoHotkeyやNode.jsを別途インストールする必要はありません。
 
 ## 動作デモ
