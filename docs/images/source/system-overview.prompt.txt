@@ -1,0 +1,9 @@
+Create an extremely clear Windows/browser workflow diagram for a GitHub README, exactly 1536x1024, 3:2 landscape, white background, dark navy text, restrained red, blue, and teal accents, very large rounded cards, large Japanese labels, no logos, no watermark, no decorative clutter. Title: 「YouTube Dictation Pause Control のしくみ」. Use one simple horizontal main flow. No empty cards, no separate Pause Guard node, no crossed arrows, no tiny text.
+
+MAIN FLOW, solid arrows, left to right:
+One large input card 「音声入力の開始・終了」 containing exactly three large source labels: 「Typeless」, 「Wispr Flow」, 「Local Voice Bridge」 → 「YouTubeDictationControl.exe」 → 「Local Bridge 127.0.0.1:17654」 → 「Chromium 拡張機能」 → 「YouTube タブ」 → one large result card.
+
+Inside 「Chromium 拡張機能」 include one large sublabel: 「Pause Guard　録音中に再生へ戻ったら再停止」. Do not draw a separate Pause Guard arrow or card.
+Inside the result card show exactly two large lines: 「音声入力中：一時停止」 and 「入力終了後：このツールが停止した動画だけ再開」.
+
+Add one compact note directly below the EXE card: 「通知領域に常駐 / Bridgeを自動復旧」. The EXE name and port must be as large and readable as the other main labels. All text must remain comfortably readable at 750px display width. Use no additional nodes, boxes, arrows, or explanatory text.
