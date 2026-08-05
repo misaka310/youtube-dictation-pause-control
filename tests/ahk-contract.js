@@ -108,9 +108,18 @@ test('AHK owns a custom notification-area menu', () => {
   assert.match(ahk, /Status:/);
   assert.match(ahk, /Restart local bridge/);
   assert.match(ahk, /Reset dictation state/);
-  assert.match(ahk, /Open log/);
+  assert.match(ahk, /Open recent activity/);
+  assert.match(ahk, /Open full log/);
   assert.match(ahk, /Start with Windows/);
   assert.match(ahk, /A_TrayMenu\.Add\("Exit"/);
+});
+
+test('AHK builds a newest-first activity view without health-check noise', () => {
+  assert.match(ahk, /BuildRecentActivityLog\(\)/);
+  assert.match(ahk, /lines\.Length\s*-\s*A_Index\s*\+\s*1/);
+  assert.match(ahk, /\[SERVER\] GET \/health/);
+  assert.match(ahk, /IsImportantActivityLine\(line\)/);
+  assert.match(ahk, /Latest important activity first/);
 });
 
 test('duplicate launch keeps the existing tray process', () => {
