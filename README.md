@@ -10,6 +10,12 @@ Windowsで音声入力中だけYouTubeを自動一時停止するローカル補
 
 配布ZIPにはAutoHotkey v2ランタイムを組み込んだ`YouTubeDictationControl.exe`とNode.jsランタイムが含まれるため、利用者がAutoHotkeyやNode.jsを別途インストールする必要はありません。
 
+<p align="center">
+  <img src="docs/images/system-overview.png" alt="YouTube Dictation Pause Controlの処理フロー概要" width="100%">
+</p>
+
+音声入力状態をローカルBridgeと拡張機能へ伝え、YouTubeを安全に一時停止・再開する流れを示しています。
+
 ## 動作デモ
 
 https://github.com/user-attachments/assets/a8541fb9-1728-41ec-9533-6d8fb5dd342b
