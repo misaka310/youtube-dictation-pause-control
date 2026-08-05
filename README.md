@@ -3,7 +3,7 @@
 [![CI](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/misaka310/youtube-dictation-pause-control)](https://github.com/misaka310/youtube-dictation-pause-control/releases/latest)
 
-Windowsで音声入力中だけYouTubeを自動一時停止するローカル補助ツールです。通知領域常駐EXEがTypeless／Wispr Flowの操作を検知し、対応するLocal Voice Bridgeは録音状態をローカルHTTP Bridgeへ直接通知します。BraveなどのChromium系ブラウザのYouTubeタブだけを拡張機能から制御します。
+Windowsで音声入力中だけYouTubeを自動一時停止するローカル補助ツールです。通知領域常駐EXEがTypeless／Wispr Flowの操作を検知し、対応するLocal Voice Bridgeは録音状態をローカルHTTP Bridgeへ直接通知します。BraveなどのChromium系ブラウザのYouTubeタブだけを制御します。
 
 > **非公式・非提携について**
 > このプロジェクトは独立して開発された非公式ツールであり、Google、YouTube、Typeless、Wispr Flowの公式製品、提携製品、承認製品、スポンサー製品ではありません。各製品名・サービス名・商標は各権利者に帰属します。
@@ -14,71 +14,34 @@ Windowsで音声入力中だけYouTubeを自動一時停止するローカル補
   <img src="docs/images/system-overview.png" alt="YouTube Dictation Pause Controlの処理フロー概要" width="100%">
 </p>
 
-音声入力状態をローカルBridgeと拡張機能へ伝え、YouTubeを安全に一時停止・再開する流れを示しています。
-
 ## 動作デモ
 
 https://github.com/user-attachments/assets/a8541fb9-1728-41ec-9533-6d8fb5dd342b
 
-上の動画は、`Ctrl + ]`で音声入力を開始すると動画が停止し、もう一度押して終了すると再開する流れを説明するデモです。画面は操作説明用に作成したUIです。
+`Ctrl + ]`で音声入力を開始すると動画が停止し、もう一度押して終了すると再開する流れを確認できます。画面は操作説明用に作成したUIです。
 
 ## できること
 
-- 音声入力開始時に、再生中だったYouTube動画を一時停止します。
-- 音声入力終了時に、このツールが一時停止した動画だけを再開します。
-- 録音中に動画が再生へ戻った場合、Pause Guardが再度一時停止を試みます。
-- YouTubeのSPA遷移やContent Scriptの二重ロードに備えたガードがあります。
-- 拡張機能を再読み込みした場合も、既に開いているYouTubeタブへContent Scriptを再注入します。
-- 通知領域に赤い再生アイコンで常駐し、ターミナルを開いたままにしません。
-- Node.jsローカルBridgeが終了した場合、状態確認後に自動復旧します。
-- Windowsログイン時の自動起動を、通知領域メニューからユーザー権限だけで設定できます。
-
-## 仕組み
-
-```text
-Typeless / Wispr Flow hotkey
-  -> YouTubeDictationControl.exe（AutoHotkey v2ランタイム内蔵）
-Local Voice Bridge recording state
-  -> Node.js local HTTP bridge on 127.0.0.1（入力元ごとにOR集約）
-  -> Brave / Chromium extension background service worker
-  -> YouTube content script
-  -> video.pause() / video.play()
-```
-
-配布ZIPの主な構成は次の通りです。
-
-```text
-YouTubeDictationPauseControl-<version>/
-├── YouTubeDictationControl.exe   通知領域常駐アプリ
-├── config/                       設定例
-├── extension/                    Brave / Chromium拡張機能
-├── server/                       127.0.0.1専用Node.js Bridge
-├── vendor/node/                  同梱Node.jsランタイム
-├── docs/                         E2E確認資料
-├── licenses/                     第三者ライセンス
-└── third_party_sources/          組み込みAutoHotkeyの対応ソース
-```
+- 音声入力開始時に、再生中だったYouTube動画を一時停止
+- 音声入力終了時に、このツールが停止した動画だけを再開
+- 録音中に再生へ戻った場合はPause Guardで再停止
+- Typeless、Wispr Flow、対応版Local Voice Bridgeの入力状態を統合
+- YouTubeのSPA遷移や拡張機能再読み込み後も再接続
+- 通知領域へ常駐し、通常利用ではターミナルを表示しない
+- Bridge終了時の自動復旧とWindowsログイン時の自動起動
 
 ## 必要なもの
 
 - Windows 10 / 11（x64）
 - Brave BrowserまたはChromium系ブラウザ
 
-**配布版の利用にNode.jsとAutoHotkeyのインストールは不要です。** ソースから開発・テストする場合はNode.js 22以上が必要で、`.ahk`を直接実行する場合だけAutoHotkey v2も使用します。
+**配布版の利用にNode.jsとAutoHotkeyのインストールは不要です。** ソースから開発・テストする場合はNode.js 22以上が必要です。
 
 ## セットアップ
 
-### 1. 配布ZIPを用意して展開する
+### 1. 配布ZIPを展開する
 
-[Latest Release](https://github.com/misaka310/youtube-dictation-pause-control/releases/latest)から`YouTubeDictationPauseControl-<version>-windows-x64.zip`を取得し、書き込み可能な任意のフォルダへ展開します。各ReleaseにはZIPと、その検証用`SHA256SUMS.txt`が添付されます。Node.jsとAutoHotkeyの別インストールは不要です。
-
-配布ZIPを自分で生成する場合は、リポジトリを取得して次を実行します。
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\build-release.ps1
-```
-
-ZIP内のファイル構成を崩さず、そのまま使用してください。
+[Latest Release](https://github.com/misaka310/youtube-dictation-pause-control/releases/latest)から`YouTubeDictationPauseControl-<version>-windows-x64.zip`を取得し、書き込み可能なフォルダへ展開します。各ReleaseにはZIPと`SHA256SUMS.txt`が添付されます。
 
 ### 2. 拡張機能を読み込む
 
@@ -88,179 +51,67 @@ ZIP内のファイル構成を崩さず、そのまま使用してください�
 
 ### 3. 常駐アプリを起動する
 
-`YouTubeDictationControl.exe`をダブルクリックします。
-
-Windows右下の通知領域にアイコンが表示されます。見えない場合は、タスクバー右端の上向き矢印から隠れているアイコンを表示してください。ターミナルウィンドウは開きません。
-
-起動後、EXEは次を行います。
-
-- 配布ZIP内の`vendor/node/node.exe`を優先して使用
-- `server/server.js`をウィンドウ非表示で直接起動
-- `/health`で互換Bridgeを確認
-- Bridge終了時に、連続失敗と再起動間隔を確認して自動復旧
-- Typeless / Wispr Flowのトグル操作を監視。Local Voice Bridgeは録音状態をHTTP Bridgeへ直接通知
+`YouTubeDictationControl.exe`をダブルクリックします。Windows右下の通知領域にアイコンが表示され、同梱Node.jsで`127.0.0.1`専用Bridgeをウィンドウ非表示で起動します。
 
 ### 4. 動作確認
 
 1. BraveでYouTube動画を再生します。
-2. Wispr Flowは`Ctrl + ]`、Typelessは`Ctrl + [`で開始します。どちらも1回押すごとのトグルです。
-3. 対応版のLocal Voice Bridgeでは、右Ctrlを押したまま右Shift左の`＼ / _`キーを押し続けると、録音状態がこのHTTP Bridgeへ直接通知されます。
-4. 動画が一時停止することを確認します。
-5. Wispr Flow / Typelessは同じ操作をもう一度行い、Local Voice Bridgeは2キーを離して終了し、動画が再開することを確認します。
+2. Wispr Flowは`Ctrl + ]`、Typelessは`Ctrl + [`で音声入力を開始します。
+3. 対応版Local Voice Bridgeでは、右Ctrlを押したまま右Shift左の`＼ / _`キーを押している間だけ録音します。
+4. 動画が停止し、入力終了後に再開することを確認します。
 
-詳細は[`docs/e2e-checklist.md`](docs/e2e-checklist.md)を参照してください。
+詳細な実機確認は[`docs/e2e-checklist.md`](docs/e2e-checklist.md)を参照してください。
 
 ## 通知領域メニュー
-
-通知領域のアイコンを右クリックすると、次の操作ができます。
 
 - `Status: ...`: Bridgeの現在状態
 - `Restart local bridge`: このEXEが所有するBridgeを再起動
 - `Reset dictation state`: 音声入力状態をinactiveへ戻す
-- `Open recent activity`: エラー、ホットキー、状態変化などを新しい順にまとめたログを開く
-- `Open full log`: `logs/control.log`を時系列のまま開く
-- `Start with Windows`: 現在のユーザーのスタートアップ登録を切り替える
-- `Exit`: 常駐アプリと、このアプリが所有するNode.js Bridgeを終了
+- `Open recent activity` / `Open full log`: 状態変化やエラーを確認
+- `Start with Windows`: 現在のユーザーの自動起動を切り替え
+- `Exit`: 常駐アプリと所有中のBridgeを終了
 
 既に別の互換Bridgeが起動している場合、そのプロセスを勝手に停止しません。
 
 ## 状態が逆になったとき
 
-Typeless / Wispr Flowを停止し、Local Voice Bridgeの2キーを離してから`Ctrl + Alt + R`を押すか、通知領域の`Reset dictation state`を選びます。AHK側のトグル状態を初期化し、HTTP Bridgeが保持するすべての入力元をinactiveへ戻します。現在のsessionIdは維持するため、このツールが停止した動画は従来どおり再開を試みます。
-
-この操作は音声入力アプリ本体を停止しません。録音中のまま実行すると実状態と再びずれるため、入力終了後に使用してください。
-
-## 自動起動と停止
-
-配布版では、通知領域メニューの`Start with Windows`を選ぶのが通常の設定方法です。現在のユーザーのスタートアップフォルダにEXEへのショートカットを作成するため、管理者権限は不要です。
-
-ソース作業用の補助スクリプトもあります。
-
-```cmd
-scripts\windows\setup-autostart.bat
-scripts\windows\remove-autostart.bat
-stop.bat
-```
-
-`stop.bat`はPID、実行ファイル名、コマンドライン、Bridgeの`/health`を照合し、このツールに該当するプロセスだけを停止します。
+Typeless / Wispr Flowを停止し、Local Voice Bridgeの録音キーを離してから`Ctrl + Alt + R`を押すか、通知領域の`Reset dictation state`を選びます。この操作は音声入力アプリ本体を停止しないため、入力終了後に使用してください。
 
 ## 設定
 
-設定を変更しない場合、`config/settings.json`は不要です。変更する場合だけ`config/settings.example.json`をコピーします。
-
-```cmd
-copy config\settings.example.json config\settings.json
-```
-
-```json
-{
-  "port": 17654,
-  "pollingIntervalMs": 500,
-  "typelessHotkey": "Ctrl+[",
-  "wisprFlowHotkey": "Ctrl+]",
-  "resetHotkey": "Ctrl+Alt+R",
-  "autoStartServer": true,
-  "debugMode": false
-}
-```
-
-| Key | Meaning |
-|---|---|
-| `port` | ローカルHTTP Bridgeの待受ポート。標準は17654 |
-| `pollingIntervalMs` | 互換用設定。現行Content Scriptの状態取得間隔は500ms固定 |
-| `typelessHotkey` | Typeless用ホットキー |
-| `wisprFlowHotkey` | Wispr Flow用ホットキー |
-| `resetHotkey` | 内部状態とBridgeをinactiveへ同期する復旧用ホットキー |
-| `autoStartServer` | 起動時にBridgeが未起動なら開始するか |
-| `debugMode` | AHK側の状態ToolTipを表示するか |
-
-Typeless / Wispr Flowのホットキーには、`Ctrl + [`や`Ctrl + ]`のように通常キーを1つ含めてください。`Ctrl + Shift`や`RightCtrl + RightShift`のような修飾キーだけの組み合わせは、押下順序やキーリピートで複数回発火して状態がずれるため使用できません。旧設定値は起動時に`Ctrl + [`へ移行されます。
-
-ポートを変更する場合は、設定だけでなく拡張機能と検証・停止スクリプト側も同じ値に合わせる必要があります。Local Voice Bridgeとの連携では、通知先を`YOUTUBE_DICTATION_PAUSE_STATE_URL`（例: `http://127.0.0.1:27654/state`）で同じポートへ変更します。
-
-## 開発・テスト
-
-Node.jsテストは次で実行します。
-
-```cmd
-npm test
-```
-
-テスト対象には、構文・JSON、HTTP API、Content Script、Background Worker、AHK常駐契約、プロセス所有権、リリース内容とライセンス契約が含まれます。
-
-個別実行:
-
-```cmd
-npm run check
-npm run test:api
-npm run test:extension
-npm run test:background
-npm run test:runtime
-npm run test:release
-```
-
-拡張機能ソースを変更したエージェントは、次を実行してローカルループバック経由で`chrome.runtime.reload()`を呼び、再起動後のversion/build IDと既存Bridge連携まで確認します。ユーザーの既存タブや`chrome://extensions`は操作しません。
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\reload-extension.ps1
-```
-
-この開発経路では`alarms`、`storage`、`http://127.0.0.1:18793/*`を使用します。通常の状態取得は従来どおり`http://127.0.0.1:17654/*`だけです。
-
-ビルドスクリプトは、公式のAutoHotkeyとNode.js Windows x64ランタイムを固定バージョン・SHA-256検証付きで取得し、EXEと配布ZIPを作成します。
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\build-release.ps1 -KeepStaging
-```
-
-生成物の実機検証:
-
-```powershell
-$version = (Get-Content -Raw package.json | ConvertFrom-Json).version
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-release-runtime.ps1 `
-  -PackageDirectory "dist\YouTubeDictationPauseControl-$version"
-```
-
-この検証は、同梱`vendor/node/node.exe`のバージョンと実使用、EXE起動、ローカルBridgeの健康状態、親子プロセス所有権、Node強制終了後の別PID復旧、通常終了時のOwned Bridge停止を確認します。
-
-通常のGitHub Actions CIは、ブランチへのpushとpull requestごとにWindows／Node.js 22で`npm test`と配布ZIPのビルド確認を実行します。実際のYouTube画面と音声入力アプリを使う確認は[`docs/e2e-checklist.md`](docs/e2e-checklist.md)で行います。
-
-## GitHub Releaseの自動公開
-
-`package.json`のバージョンと同じ`vX.Y.Z`タグをpushすると、専用のRelease workflowが次を自動実行します。
-
-1. タグと`package.json`のバージョン一致を検証
-2. 全テストを実行
-3. 自己完結EXEを含むWindows x64 ZIPを生成
-4. ZIPの`SHA256SUMS.txt`を生成
-5. GitHub Releaseを作成し、ZIPとチェックサムを添付
-
-同じタグのworkflowを再実行した場合は、既存Releaseの添付ファイルを`--clobber`で置き換えます。保守者向けの手順は[`docs/releasing.md`](docs/releasing.md)を参照してください。
+設定を変更しない場合、`config/settings.json`は不要です。Typeless / Wispr Flowのホットキーには通常キーを1つ含めてください。`Ctrl + Shift`のような修飾キーだけの組み合わせは使えません。ポート、ホットキー、復旧用キー、自動起動などを変更する場合は[設定リファレンス](docs/configuration.md)を参照してください。
 
 ## プライバシーとセキュリティ
 
-- 外部サーバーへ音声や入力内容を送信しません。
-- ローカルHTTP Bridgeは`127.0.0.1`のみにバインドします。
-- APIキー、OAuthトークン、認証情報は使いません。
-- 実行時ログは`logs/control.log`、重要イベントを新しい順に並べた表示用ログは`logs/recent-activity.log`、PIDは`runtime/`に保存され、Git管理外です。新しいSERVERログはPCのローカル時刻とUTC差を併記し、正常な`GET /health`は記録しません。
-- ローカルポートを外部ネットワークへ公開しないでください。
-- CORSは拡張機能Origin向けに制限しています。
+- 外部サーバーへ音声や入力内容を送信しません
+- ローカルHTTP Bridgeは`127.0.0.1`のみにバインドします
+- APIキー、OAuthトークン、認証情報は使いません
+- 実行ログとPIDはローカルへ保存し、Git管理外です
+- ローカルポートを外部ネットワークへ公開しないでください
+- CORSは拡張機能Origin向けに制限しています
 
 詳しくは[`SECURITY.md`](SECURITY.md)を参照してください。
 
 ## 制限
 
-- YouTube側のDOM変更やブラウザ仕様変更で動作しなくなる場合があります。
-- 拡張機能自体が無効または未読込の場合、そのタブは制御できません。
-- このツールが一時停止していない動画は、終了時に再開しません。
-- Pause Guardは再生復帰の抑制を試みますが、すべてのYouTube UI状態で完全な停止維持を保証するものではありません。
-- Typeless / Wispr Flow本体の録音状態は直接取得せず、ホットキー押下を状態トグルとして扱います。対応版のLocal Voice Bridgeは、自身が確定した録音開始・終了を`source=local-voice-bridge`として直接通知します。
-- 配布ZIPの容量は、同梱Node.jsランタイムの分だけ従来版より大きくなります。
+- YouTube側のDOM変更やブラウザ仕様変更で動作しなくなる場合があります
+- 拡張機能が無効または未読込のタブは制御できません
+- このツールが一時停止していない動画は、入力終了時に再開しません
+- Pause GuardはすべてのYouTube UI状態で完全な停止維持を保証するものではありません
+- Typeless / Wispr Flowの状態はホットキー押下をトグルとして扱います
 
-## 旧方式について
+## 開発・配布資料
 
-Native Messagingは、レジストリ・絶対パス・Service Worker寿命の扱いが複雑なため採用していません。検討記録は`docs/legacy-native-messaging.md`にあります。
+```cmd
+npm test
+```
+
+- 状態と再生制御: [`docs/state-behavior.md`](docs/state-behavior.md)
+- Windows GUI検証: [`docs/windows-gui-testing.md`](docs/windows-gui-testing.md)
+- 公開前チェック: [`docs/public-release-checklist.md`](docs/public-release-checklist.md)
+- Release手順: [`docs/releasing.md`](docs/releasing.md)（`vX.Y.Z`タグで自動公開）
+- 旧Native Messaging検討記録: [`docs/legacy-native-messaging.md`](docs/legacy-native-messaging.md)
 
 ## License
 
-このリポジトリ独自のソースコードはMIT Licenseです。配布版EXEに組み込まれるAutoHotkey v2.0.26ランタイムはGPL-2.0で、配布ZIPにはGPL本文と対応するAutoHotkeyソースアーカイブを含めます。同梱Node.js v24.18.0のライセンスと第三者通知は`vendor/node/LICENSE`に含まれます。詳細は[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)を参照してください。
+このリポジトリ独自のソースコードはMIT Licenseです。配布版に含まれるAutoHotkeyとNode.jsには各ライセンスが適用されます。詳細は[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)を参照してください。
