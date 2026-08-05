@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { appendLineWithRetry } = require('../server/log-writer');
+const { appendLineWithRetry, formatLocalTimestamp } = require('../server/log-writer');
 
 let caseCount = 0;
 
@@ -90,6 +90,32 @@ test('returns a compact failure result after transient retries are exhausted', (
   assert.strictEqual(attempts, 3);
   assert.deepStrictEqual(delays, [10, 20]);
   assert.deepStrictEqual(result, { ok: false, attempts: 3, error });
+});
+
+test('formats local timestamps with an explicit positive UTC offset', () => {
+  const fakeDate = {
+    getFullYear: () => 2026,
+    getMonth: () => 7,
+    getDate: () => 1,
+    getHours: () => 15,
+    getMinutes: () => 50,
+    getSeconds: () => 19,
+    getTimezoneOffset: () => -540
+  };
+  assert.strictEqual(formatLocalTimestamp(fakeDate), '2026-08-01 15:50:19 +09:00');
+});
+
+test('formats local timestamps with an explicit negative UTC offset', () => {
+  const fakeDate = {
+    getFullYear: () => 2026,
+    getMonth: () => 0,
+    getDate: () => 2,
+    getHours: () => 3,
+    getMinutes: () => 4,
+    getSeconds: () => 5,
+    getTimezoneOffset: () => 300
+  };
+  assert.strictEqual(formatLocalTimestamp(fakeDate), '2026-01-02 03:04:05 -05:00');
 });
 
 console.log(`Log writer tests passed: ${caseCount} cases`);

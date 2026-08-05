@@ -1,5 +1,7 @@
 const assert = require('assert');
-const { createStateResponder, createMessageListener } = require('../extension/background.js');
+const fs = require('fs');
+const path = require('path');
+const { createStateResponder, createMessageListener, createExistingTabInjector } = require('../extension/background.js');
 
 const quietLogger = { log() {}, error() {} };
 const cases = [];
@@ -195,6 +197,68 @@ test('sendResponse exception on failure is swallowed without retry or unhandled 
   assert.strictEqual(sendCalls, 1);
   assert.ok(errors.some(message => message.includes('state request failed')));
   assert.ok(errors.some(message => message.includes('sendResponse failed')));
+});
+
+test('manifest grants scripting permission for refreshing already-open YouTube tabs', async () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'extension', 'manifest.json'), 'utf8'));
+  assert.ok(manifest.permissions.includes('scripting'));
+});
+
+test('existing YouTube tabs receive the content script after background startup', async () => {
+  const queryCalls = [];
+  const injections = [];
+  const chrome = {
+    runtime: { lastError: null },
+    tabs: {
+      query(query, callback) {
+        queryCalls.push(query);
+        callback([{ id: 11 }, { id: 22 }]);
+      }
+    },
+    scripting: {
+      async executeScript(details) {
+        injections.push(details);
+      }
+    }
+  };
+  const summary = await createExistingTabInjector({ chrome, console: quietLogger })();
+  assert.strictEqual(queryCalls.length, 1);
+  assert.deepStrictEqual(injections, [
+    { target: { tabId: 11 }, files: ['content.js'] },
+    { target: { tabId: 22 }, files: ['content.js'] }
+  ]);
+  assert.deepStrictEqual(summary, { attempted: 2, injected: 2, failed: 0 });
+});
+
+test('existing-tab refresh skips tabs without a numeric id', async () => {
+  let executeCalls = 0;
+  const chrome = {
+    runtime: { lastError: null },
+    tabs: { query(_query, callback) { callback([{}, { id: null }, { id: 5 }]); } },
+    scripting: { async executeScript() { executeCalls += 1; } }
+  };
+  const summary = await createExistingTabInjector({ chrome, console: quietLogger })();
+  assert.strictEqual(executeCalls, 1);
+  assert.deepStrictEqual(summary, { attempted: 1, injected: 1, failed: 0 });
+});
+
+test('one failed existing-tab injection does not block the remaining tabs', async () => {
+  const errors = [];
+  const chrome = {
+    runtime: { lastError: null },
+    tabs: { query(_query, callback) { callback([{ id: 7 }, { id: 8 }]); } },
+    scripting: {
+      async executeScript({ target }) {
+        if (target.tabId === 7) throw new Error('tab closed');
+      }
+    }
+  };
+  const summary = await createExistingTabInjector({
+    chrome,
+    console: { log() {}, error: (...args) => errors.push(args.join(' ')) }
+  })();
+  assert.deepStrictEqual(summary, { attempted: 2, injected: 1, failed: 1 });
+  assert.ok(errors.some(message => message.includes('tab 7')));
 });
 
 async function main() {
