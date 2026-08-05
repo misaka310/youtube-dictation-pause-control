@@ -3,6 +3,22 @@ const fs = require('fs');
 const RETRYABLE_ERROR_CODES = new Set(['EBUSY', 'EACCES', 'EPERM']);
 const waitArray = new Int32Array(new SharedArrayBuffer(4));
 
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+function formatLocalTimestamp(date = new Date()) {
+  const offsetMinutes = -date.getTimezoneOffset();
+  const offsetSign = offsetMinutes >= 0 ? '+' : '-';
+  const absoluteOffset = Math.abs(offsetMinutes);
+
+  return [
+    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`,
+    `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`,
+    `${offsetSign}${pad2(Math.floor(absoluteOffset / 60))}:${pad2(absoluteOffset % 60)}`
+  ].join(' ');
+}
+
 function defaultSleep(delayMs) {
   Atomics.wait(waitArray, 0, 0, delayMs);
 }
@@ -39,5 +55,6 @@ function appendLineWithRetry(filePath, line, options = {}) {
 }
 
 module.exports = {
-  appendLineWithRetry
+  appendLineWithRetry,
+  formatLocalTimestamp
 };

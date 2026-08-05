@@ -1,10 +1,10 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { appendLineWithRetry } = require('./log-writer');
+const { appendLineWithRetry, formatLocalTimestamp } = require('./log-writer');
 
 const SERVICE_NAME = 'youtube-dictation-pause';
-const VERSION = '1.3.2';
+const VERSION = '1.3.3';
 const DEFAULT_PORT = 17654;
 const DEFAULT_SETTINGS_PATH = path.join(__dirname, '..', 'config', 'settings.json');
 const RUNTIME_DIR = path.join(__dirname, '..', 'runtime');
@@ -35,7 +35,7 @@ const LOG_FILE_PATH = process.env.YDP_LOG_FILE
   : path.join(__dirname, '..', 'logs', 'control.log');
 
 function logMessage(message) {
-  const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const timestamp = formatLocalTimestamp();
   const logLine = `${timestamp} [SERVER] ${message}\n`;
   console.log(`[SERVER] ${message}`);
 
@@ -142,7 +142,7 @@ const server = http.createServer((req, res) => {
   const { method, url } = req;
 
   if (method === 'GET' && url === '/health') {
-    logMessage('GET /health');
+    // Successful health probes are intentionally omitted from the user-facing log.
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, service: SERVICE_NAME, version: VERSION }));
     return;

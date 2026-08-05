@@ -12,6 +12,7 @@ global APP_ROOT := A_IsCompiled ? A_ScriptDir : GetParentDirectory(A_ScriptDir)
 global SETTINGS_FILE := APP_ROOT . "\config\settings.json"
 global SERVER_SCRIPT := APP_ROOT . "\server\server.js"
 global LOG_FILE := APP_ROOT . "\logs\control.log"
+global RECENT_ACTIVITY_LOG_FILE := APP_ROOT . "\logs\recent-activity.log"
 global RUNTIME_DIR := APP_ROOT . "\runtime"
 global AHK_PID_FILE := RUNTIME_DIR . "\youtube-dictation-ahk.pid"
 global STARTUP_SHORTCUT_NAME := "YouTube Dictation Pause Control.lnk"
@@ -478,7 +479,73 @@ ToggleStartupRegistration(*) {
     }
 }
 
-OpenLog(*) {
+IsImportantActivityLine(line) {
+    return InStr(line, "ERROR")
+        || InStr(line, "WARNING")
+        || InStr(line, "FATAL")
+        || InStr(line, "Controller started")
+        || InStr(line, "server started")
+        || InStr(line, "hotkey triggered")
+        || InStr(line, "state changed")
+        || InStr(line, "POST /state")
+        || InStr(line, "manual state reset")
+        || InStr(line, "restarting")
+        || InStr(line, "exited")
+        || InStr(line, "shutdown requested")
+}
+
+BuildRecentActivityLog() {
+    global LOG_FILE, RECENT_ACTIVITY_LOG_FILE
+
+    try {
+        content := FileExist(LOG_FILE) ? FileRead(LOG_FILE, "UTF-8") : ""
+        normalized := StrReplace(content, "`r`n", "`n")
+        lines := StrSplit(normalized, "`n")
+        output := "Latest important activity first. Timestamps use the PC local time; server entries include the UTC offset.`r`n"
+        output .= "Full chronological log: logs\control.log`r`n`r`n"
+        added := 0
+
+        Loop lines.Length {
+            lineIndex := lines.Length - A_Index + 1
+            line := Trim(lines[lineIndex], "`r`n")
+            if (line = "" || InStr(line, "[SERVER] GET /health") || !IsImportantActivityLine(line)) {
+                continue
+            }
+            output .= line . "`r`n"
+            added += 1
+            if (added >= 500) {
+                break
+            }
+        }
+
+        if (added = 0) {
+            output .= "No important activity has been recorded yet.`r`n"
+        }
+
+        if (FileExist(RECENT_ACTIVITY_LOG_FILE)) {
+            FileDelete(RECENT_ACTIVITY_LOG_FILE)
+        }
+        FileAppend(output, RECENT_ACTIVITY_LOG_FILE, "UTF-8")
+        return true
+    } catch as err {
+        LogMessage("ERROR: Failed to build recent activity log: " . err.Message)
+        return false
+    }
+}
+
+OpenRecentActivity(*) {
+    global RECENT_ACTIVITY_LOG_FILE
+    try {
+        if (!BuildRecentActivityLog()) {
+            throw Error("recent activity log could not be generated")
+        }
+        Run('notepad.exe "' . RECENT_ACTIVITY_LOG_FILE . '"')
+    } catch as err {
+        MsgBox("Could not open recent activity: " . err.Message, "YouTube Dictation Control", "Iconx")
+    }
+}
+
+OpenFullLog(*) {
     global LOG_FILE
     try {
         if (!FileExist(LOG_FILE)) {
@@ -518,7 +585,8 @@ ConfigureTrayMenu() {
     A_TrayMenu.Add()
     A_TrayMenu.Add("Restart local bridge", RestartOwnedServer)
     A_TrayMenu.Add("Reset dictation state", ResetDictationState)
-    A_TrayMenu.Add("Open log", OpenLog)
+    A_TrayMenu.Add("Open recent activity", OpenRecentActivity)
+    A_TrayMenu.Add("Open full log", OpenFullLog)
     A_TrayMenu.Add()
     A_TrayMenu.Add("Start with Windows", ToggleStartupRegistration)
     A_TrayMenu.Add()
