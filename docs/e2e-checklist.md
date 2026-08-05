@@ -14,7 +14,7 @@
 
 ## 常駐アプリの事前確認
 
-1. 通知領域メニューから`Open log`を選び、現在の配布フォルダの`logs/control.log`が開くこと。
+1. 通知領域メニューから`Open recent activity`と`Open full log`を選び、現在の配布フォルダの`logs/recent-activity.log`と`logs/control.log`がそれぞれ開くこと。
 2. `Restart local bridge`を選び、Bridgeが再び`running`になること。
 3. `Start with Windows`をオン・オフし、現在のユーザーのスタートアップフォルダにショートカットが作成・削除されること。
 4. `Exit`を選び、通知領域アイコンと、このEXEが起動したNode.jsだけが終了すること。
