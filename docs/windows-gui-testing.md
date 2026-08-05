@@ -11,7 +11,8 @@ The normal CI suite verifies JavaScript, AutoHotkey contracts, API behavior, rel
 - a duplicate launch still leaves one controller;
 - Reset dictation state reaches the real handler;
 - Restart local bridge starts a new owned Node bridge and leaves the menu operable;
-- Open log opens the intended log viewer;
+- Open recent activity opens `recent-activity.log`;
+- Open full log opens `control.log`;
 - Exit removes the controller and its owned Node bridge;
 - a second launch remains operable and exits cleanly.
 

@@ -21,10 +21,12 @@ PACKAGE_ROOT = EXE.parent
 LOG_FILE = PACKAGE_ROOT / "logs" / "control.log"
 SERVER_SCRIPT = (PACKAGE_ROOT / "server" / "server.js").resolve()
 RESULT_DIR = Path(os.environ.get("GUI_SMOKE_RESULT_DIR", Path.cwd() / "test-results" / "windows-gui-smoke"))
+CREATE_NO_WINDOW = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
 EXPECTED_ACTIONS = (
     "Restart local bridge",
     "Reset dictation state",
-    "Open log",
+    "Open recent activity",
+    "Open full log",
     "Start with Windows",
     "Exit",
 )
@@ -113,7 +115,7 @@ def owned_server_processes() -> list[psutil.Process]:
 
 
 def launch_app() -> psutil.Process:
-    subprocess.Popen([str(EXE)], cwd=PACKAGE_ROOT)
+    subprocess.Popen([str(EXE)], cwd=PACKAGE_ROOT, creationflags=CREATE_NO_WINDOW)
     def find_one_controller():
         found = controller_processes()
         return found if len(found) == 1 else None
@@ -127,7 +129,7 @@ def launch_app() -> psutil.Process:
 
 
 def duplicate_launch_keeps_single_instance(original_pid: int) -> psutil.Process:
-    duplicate = subprocess.Popen([str(EXE)], cwd=PACKAGE_ROOT)
+    duplicate = subprocess.Popen([str(EXE)], cwd=PACKAGE_ROOT, creationflags=CREATE_NO_WINDOW)
 
     def find_original_controller():
         found = controller_processes()
@@ -394,17 +396,17 @@ def visible_non_controller_windows() -> dict[int, WindowInfo]:
     }
 
 
-def verify_open_log(pid: int) -> None:
+def verify_open_log(pid: int, menu_title: str, expected_filename: str) -> None:
     before = set(visible_non_controller_windows())
-    click_menu_item(pid, "Open log")
+    click_menu_item(pid, menu_title)
 
     def find_log_window():
         for hwnd, row in visible_non_controller_windows().items():
-            if hwnd not in before and "control.log" in row.title.casefold():
+            if hwnd not in before and expected_filename.casefold() in row.title.casefold():
                 return row
         return None
 
-    row = wait_until("control.log viewer", find_log_window, timeout=10)
+    row = wait_until(f"{expected_filename} viewer", find_log_window, timeout=10)
     USER32.PostMessageW(row.hwnd, WM_CLOSE, 0, 0)
 
 
@@ -591,7 +593,16 @@ def main() -> int:
             "restart bridge action",
             lambda: verify_logged_action(pid, "Restart local bridge", "Started owned Node bridge PID", timeout=20),
         )
-        run_scenario(results, "open log action", lambda: verify_open_log(pid))
+        run_scenario(
+            results,
+            "open recent activity action",
+            lambda: verify_open_log(pid, "Open recent activity", "recent-activity.log"),
+        )
+        run_scenario(
+            results,
+            "open full log action",
+            lambda: verify_open_log(pid, "Open full log", "control.log"),
+        )
         run_scenario(results, "clean exit", lambda: verify_exit(pid))
 
         second = launch_app()
