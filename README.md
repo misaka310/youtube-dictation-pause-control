@@ -22,6 +22,7 @@ https://github.com/user-attachments/assets/a8541fb9-1728-41ec-9533-6d8fb5dd342b
 - 音声入力終了時に、このツールが一時停止した動画だけを再開します。
 - 録音中に動画が再生へ戻った場合、Pause Guardが再度一時停止を試みます。
 - YouTubeのSPA遷移やContent Scriptの二重ロードに備えたガードがあります。
+- 拡張機能を再読み込みした場合も、既に開いているYouTubeタブへContent Scriptを再注入します。
 - 通知領域に赤い再生アイコンで常駐し、ターミナルを開いたままにしません。
 - Node.jsローカルBridgeが終了した場合、状態確認後に自動復旧します。
 - Windowsログイン時の自動起動を、通知領域メニューからユーザー権限だけで設定できます。
@@ -110,7 +111,8 @@ Windows右下の通知領域にアイコンが表示されます。見えない�
 - `Status: ...`: Bridgeの現在状態
 - `Restart local bridge`: このEXEが所有するBridgeを再起動
 - `Reset dictation state`: 音声入力状態をinactiveへ戻す
-- `Open log`: `logs/control.log`を開く
+- `Open recent activity`: エラー、ホットキー、状態変化などを新しい順にまとめたログを開く
+- `Open full log`: `logs/control.log`を時系列のまま開く
 - `Start with Windows`: 現在のユーザーのスタートアップ登録を切り替える
 - `Exit`: 常駐アプリと、このアプリが所有するNode.js Bridgeを終了
 
@@ -191,6 +193,14 @@ npm run test:runtime
 npm run test:release
 ```
 
+拡張機能ソースを変更したエージェントは、次を実行してローカルループバック経由で`chrome.runtime.reload()`を呼び、再起動後のversion/build IDと既存Bridge連携まで確認します。ユーザーの既存タブや`chrome://extensions`は操作しません。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\reload-extension.ps1
+```
+
+この開発経路では`alarms`、`storage`、`http://127.0.0.1:18793/*`を使用します。通常の状態取得は従来どおり`http://127.0.0.1:17654/*`だけです。
+
 ビルドスクリプトは、公式のAutoHotkeyとNode.js Windows x64ランタイムを固定バージョン・SHA-256検証付きで取得し、EXEと配布ZIPを作成します。
 
 ```powershell
@@ -226,7 +236,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 - 外部サーバーへ音声や入力内容を送信しません。
 - ローカルHTTP Bridgeは`127.0.0.1`のみにバインドします。
 - APIキー、OAuthトークン、認証情報は使いません。
-- 実行時ログは`logs/control.log`、PIDは`runtime/`に保存され、Git管理外です。
+- 実行時ログは`logs/control.log`、重要イベントを新しい順に並べた表示用ログは`logs/recent-activity.log`、PIDは`runtime/`に保存され、Git管理外です。新しいSERVERログはPCのローカル時刻とUTC差を併記し、正常な`GET /health`は記録しません。
 - ローカルポートを外部ネットワークへ公開しないでください。
 - CORSは拡張機能Origin向けに制限しています。
 
@@ -235,7 +245,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\windows\verify-r
 ## 制限
 
 - YouTube側のDOM変更やブラウザ仕様変更で動作しなくなる場合があります。
-- 拡張機能が読み込まれていないタブは制御できません。
+- 拡張機能自体が無効または未読込の場合、そのタブは制御できません。
 - このツールが一時停止していない動画は、終了時に再開しません。
 - Pause Guardは再生復帰の抑制を試みますが、すべてのYouTube UI状態で完全な停止維持を保証するものではありません。
 - Typeless / Wispr Flow本体の録音状態は直接取得せず、ホットキー押下を状態トグルとして扱います。対応版のLocal Voice Bridgeは、自身が確定した録音開始・終了を`source=local-voice-bridge`として直接通知します。

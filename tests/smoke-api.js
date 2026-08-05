@@ -1,4 +1,5 @@
 const assert = require('assert');
+const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
@@ -8,7 +9,7 @@ const packageJson = require('../package.json');
 const ROOT = path.resolve(__dirname, '..');
 const PORT = 22000 + Math.floor(Math.random() * 20000);
 const LOG_FILE = path.join(os.tmpdir(), `youtube-dictation-pause-smoke-${process.pid}.log`);
-const API_CASE_COUNT = 18;
+const API_CASE_COUNT = 20;
 
 function request(method, route, body, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -187,6 +188,10 @@ async function main() {
 
     const afterReset = await request('POST', '/state', { active: true, source: 'test' });
     assert.strictEqual(afterReset.body.sessionId, 1);
+
+    const logText = fs.readFileSync(LOG_FILE, 'utf8');
+    assert.doesNotMatch(logText, /\[SERVER\] GET \/health/);
+    assert.match(logText, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2} \[SERVER\]/m);
 
     console.log(`API tests passed: ${API_CASE_COUNT} cases`);
   } catch (err) {
