@@ -1,5 +1,6 @@
 param(
-    [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')) 'assets\youtube-dictation.ico')
+    [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')) 'assets\youtube-dictation.ico'),
+    [string]$ExtensionIconDirectory = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')) 'extension\icons')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,6 +24,7 @@ function New-RoundedRectanglePath {
 
 $outputDirectory = Split-Path -Parent $OutputPath
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
+New-Item -ItemType Directory -Force -Path $ExtensionIconDirectory | Out-Null
 
 $sizes = @(16, 20, 24, 32, 40, 48, 64, 128, 256)
 $images = [System.Collections.Generic.List[byte[]]]::new()
@@ -52,6 +54,13 @@ foreach ($size in $sizes) {
     $stream = [System.IO.MemoryStream]::new()
     $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
     $images.Add($stream.ToArray())
+
+    if ($size -in @(16, 32, 48, 128)) {
+        $bitmap.Save(
+            (Join-Path $ExtensionIconDirectory "icon$size.png"),
+            [System.Drawing.Imaging.ImageFormat]::Png
+        )
+    }
 
     $stream.Dispose()
     $whiteBrush.Dispose()
