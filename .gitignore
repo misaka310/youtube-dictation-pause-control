@@ -34,3 +34,7 @@ logs/*.tmp
 
 # Local scratch files
 scratch/
+
+# Local agent/tool residue
+=/
+.ai-bridge/
