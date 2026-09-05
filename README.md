@@ -45,7 +45,7 @@ https://github.com/user-attachments/assets/a8541fb9-1728-41ec-9533-6d8fb5dd342b
 
 ### 2. 拡張機能を読み込む
 
-1. Braveで`brave://extensions`を開きます。
+1. Braveで`brave://extensions`を開きます（Chromeの場合は`chrome://extensions`）。
 2. デベロッパーモードをオンにします。
 3. 「パッケージ化されていない拡張機能を読み込む」から、展開先の`extension`フォルダを選びます。
 
@@ -105,6 +105,8 @@ Typeless / Wispr Flowを停止し、Local Voice Bridgeの録音キーを離し�
 ```cmd
 npm test
 ```
+
+- 変更履歴: [GitHub Releases](https://github.com/misaka310/youtube-dictation-pause-control/releases)
 
 - 状態と再生制御: [`docs/state-behavior.md`](docs/state-behavior.md)
 - Windows GUI検証: [`docs/windows-gui-testing.md`](docs/windows-gui-testing.md)
