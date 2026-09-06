@@ -16,7 +16,8 @@ This project is a local Windows utility. It does not use accounts, API keys, OAu
 
 The extension requests access to:
 
-- `http://127.0.0.1:17654/*`
+- `http://127.0.0.1:17654/*` — the user-facing HTTP bridge described above.
+- `http://127.0.0.1:18793/*` — a developer-only auto-reload endpoint (`extension/agent-reload.js`, loaded unconditionally by `background.js`). No developer-reload server is bundled or run by the released application; this permission is inert unless something else on `127.0.0.1:18793` implements the matching reload protocol.
 - YouTube pages under `youtube.com`
 
 It does not request access to arbitrary websites.
