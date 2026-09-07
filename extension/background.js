@@ -1,9 +1,5 @@
 // YouTube Dictation Pause Control - Background Service Worker
 
-if (typeof importScripts === 'function') {
-  importScripts('agent-reload.js');
-}
-
 const DEFAULT_SERVER_URL = 'http://127.0.0.1:17654';
 const YOUTUBE_URL_PATTERNS = [
   'https://www.youtube.com/*',
