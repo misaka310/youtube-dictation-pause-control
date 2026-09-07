@@ -36,21 +36,13 @@ Typeless / Wispr Flowのホットキーには、`Ctrl + [`や`Ctrl + ]`のよう
 
 ## ポートを変更する場合
 
-設定だけでなく、拡張機能、検証スクリプト、停止スクリプトも同じ値へ合わせる必要があります。Local Voice Bridgeとの連携では、通知先を`YOUTUBE_DICTATION_PAUSE_STATE_URL`へ設定します。
+設定だけでなく、拡張機能、検証スクリプト、停止スクリプトも同じ値へ合わせる必要があります。BridgeはloopbackのHTTPだけを使用し、外部ネットワークへ公開しないでください。
 
-```text
-http://127.0.0.1:27654/state
-```
+## 使用ポート
 
-通知先はloopbackのHTTP URLと`/state`だけを使用してください。外部ネットワークへBridgeを公開しないでください。
-
-## 使用ポート一覧
-
-| ポート | 用途 | 対象 |
-|---|---|---|
-| 17654 | ローカルHTTP Bridgeの既定待受ポート（`port`設定で変更可） | 利用者 |
-| 27654 | Local Voice Bridge連携時の状態通知先（`YOUTUBE_DICTATION_PAUSE_STATE_URL`） | 利用者（連携時のみ） |
-| 18793 | 拡張機能の開発者向け自動リロード機構（`extension/agent-reload.js`）専用 | 開発者のみ |
+| ポート | 用途 |
+|---|---|
+| 17654 | ローカルHTTP Bridgeの既定待受ポート（`port`設定で変更可） |
 
 ## 自動起動と停止
 

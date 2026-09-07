@@ -11,7 +11,6 @@ const steps = [
   [node, ['tests/smoke-api.js']],
   [node, ['tests/extension-content.js']],
   [node, ['tests/extension-background.js']],
-  [node, ['tests/agent-reload.js']],
   [node, ['tests/log-writer.js']],
   [node, ['tests/ahk-contract.js']],
   [node, ['tests/release-contract.js']],

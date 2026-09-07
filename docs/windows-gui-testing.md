@@ -20,7 +20,7 @@ The test checks that **Start with Windows** exists and is enabled, but it delibe
 
 ## GitHub-hosted runner
 
-This public repository runs the GUI smoke on GitHub-hosted `windows-latest`, so it does not consume private-repository Actions minutes or require the 74 self-hosted VM. The job runs for pull requests and can also be started with `workflow_dispatch`.
+This public repository runs the GUI smoke on GitHub-hosted `windows-latest`. The job runs for pull requests and can also be started with `workflow_dispatch`.
 
 The smoke still requires an interactive Windows desktop. The test fails explicitly when the runner session is non-interactive, when another packaged controller is already running, or when UI Automation cannot reach the notification-area menu.
 
