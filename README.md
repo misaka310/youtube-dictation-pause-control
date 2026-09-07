@@ -3,7 +3,7 @@
 [![CI](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/misaka310/youtube-dictation-pause-control/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/misaka310/youtube-dictation-pause-control)](https://github.com/misaka310/youtube-dictation-pause-control/releases/latest)
 
-Windowsで音声入力中だけYouTubeを自動一時停止するローカル補助ツールです。通知領域常駐EXEがTypeless／Wispr Flowの操作を検知し、対応するLocal Voice Bridgeは録音状態をローカルHTTP Bridgeへ直接通知します。BraveなどのChromium系ブラウザのYouTubeタブだけを制御します。
+Windowsで音声入力中だけYouTubeを自動一時停止するローカル補助ツールです。通知領域常駐EXEがTypeless／Wispr Flowの操作を検知し、BraveなどのChromium系ブラウザのYouTubeタブだけを制御します。
 
 > **非公式・非提携について**
 > このプロジェクトは独立して開発された非公式ツールであり、Google、YouTube、Typeless、Wispr Flowの公式製品、提携製品、承認製品、スポンサー製品ではありません。各製品名・サービス名・商標は各権利者に帰属します。
@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/a8541fb9-1728-41ec-9533-6d8fb5dd342b
 - 音声入力開始時に、再生中だったYouTube動画を一時停止
 - 音声入力終了時に、このツールが停止した動画だけを再開
 - 録音中に再生へ戻った場合はPause Guardで再停止
-- Typeless、Wispr Flow、対応版Local Voice Bridgeの入力状態を統合
+- Typeless、Wispr Flowの入力状態を統合
 - YouTubeのSPA遷移や拡張機能再読み込み後も再接続
 - 通知領域へ常駐し、通常利用ではターミナルを表示しない
 - Bridge終了時の自動復旧とWindowsログイン時の自動起動
@@ -57,8 +57,7 @@ https://github.com/user-attachments/assets/a8541fb9-1728-41ec-9533-6d8fb5dd342b
 
 1. BraveでYouTube動画を再生します。
 2. Wispr Flowは`Ctrl + ]`、Typelessは`Ctrl + [`で音声入力を開始します。
-3. 対応版Local Voice Bridgeでは、右Ctrlを押したまま右Shift左の`＼ / _`キーを押している間だけ録音します。
-4. 動画が停止し、入力終了後に再開することを確認します。
+3. 動画が停止し、入力終了後に再開することを確認します。
 
 詳細な実機確認は[`docs/e2e-checklist.md`](docs/e2e-checklist.md)を参照してください。
 
@@ -75,7 +74,7 @@ https://github.com/user-attachments/assets/a8541fb9-1728-41ec-9533-6d8fb5dd342b
 
 ## 状態が逆になったとき
 
-Typeless / Wispr Flowを停止し、Local Voice Bridgeの録音キーを離してから`Ctrl + Alt + R`を押すか、通知領域の`Reset dictation state`を選びます。この操作は音声入力アプリ本体を停止しないため、入力終了後に使用してください。
+Typeless / Wispr Flowを停止してから`Ctrl + Alt + R`を押すか、通知領域の`Reset dictation state`を選びます。この操作は音声入力アプリ本体を停止しないため、入力終了後に使用してください。
 
 ## 設定
 
@@ -107,7 +106,6 @@ npm test
 ```
 
 - 変更履歴: [GitHub Releases](https://github.com/misaka310/youtube-dictation-pause-control/releases)
-
 - 状態と再生制御: [`docs/state-behavior.md`](docs/state-behavior.md)
 - Windows GUI検証: [`docs/windows-gui-testing.md`](docs/windows-gui-testing.md)
 - 公開前チェック: [`docs/public-release-checklist.md`](docs/public-release-checklist.md)
