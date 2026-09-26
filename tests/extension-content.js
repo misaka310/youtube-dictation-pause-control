@@ -50,20 +50,29 @@ function createHarness(states = [], initialVideo = new FakeVideo(), options = {}
       }
     }
   };
+  const document = {
+    visibilityState: options.visibilityState || 'visible',
+    querySelector: () => video,
+    addEventListener: options.addEventListener || (() => {})
+  };
   const controller = createPauseController({
     window: {},
-    document: { querySelector: () => video },
+    document,
     chrome,
     console: {
       log: (...args) => logs.push(args.join(' ')),
       error: (...args) => logs.push(args.join(' '))
     },
     requestTimeoutMs: options.requestTimeoutMs,
+    pollingIntervalMs: options.pollingIntervalMs,
+    hiddenPollingIntervalMs: options.hiddenPollingIntervalMs,
+    hiddenActivePollingIntervalMs: options.hiddenActivePollingIntervalMs,
     setTimeout: options.setTimeout,
     clearTimeout: options.clearTimeout
   });
   return {
     controller,
+    document,
     logs,
     getRequestCount: () => requestCount,
     setVideo: nextVideo => { video = nextVideo; }
@@ -160,22 +169,52 @@ test('missing video is safe and cannot create resume ownership', async () => {
   assert.strictEqual(harness.controller.getState().pausedSessionId, null);
 });
 
-test('duplicate content-script evaluation keeps only one polling interval', async () => {
+test('duplicate content-script evaluation keeps only one polling timer', async () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'extension', 'content.js'), 'utf8');
   const timers = [];
   const context = {
     window: {},
-    document: { querySelector: () => null },
+    document: { visibilityState: 'visible', querySelector: () => null, addEventListener() {} },
     chrome: { runtime: { sendMessage() {}, lastError: null } },
     console: { log() {}, error() {} },
-    setInterval(callback) { timers.push(callback); return timers.length; },
-    clearInterval() {},
-    setTimeout() { return 1; },
+    setTimeout(callback, delay) { timers.push({ callback, delay }); return timers.length; },
     clearTimeout() {}
   };
   vm.runInNewContext(source, context);
   vm.runInNewContext(source, context);
   assert.strictEqual(timers.length, 1);
+  assert.strictEqual(timers[0].delay, 500);
+});
+
+test('hidden inactive tabs back off polling to five seconds', async () => {
+  const { controller } = createHarness([], new FakeVideo(), { visibilityState: 'hidden' });
+  assert.strictEqual(controller.nextPollDelay(), 5000);
+});
+
+test('hidden active tabs keep a one-second safety poll', async () => {
+  const harness = createHarness([{ active: true, sessionId: 11 }], new FakeVideo(), { visibilityState: 'hidden' });
+  await poll(harness.controller);
+  assert.strictEqual(harness.controller.nextPollDelay(), 1000);
+});
+
+test('visible tabs retain the original 500ms cadence', async () => {
+  const { controller } = createHarness([], new FakeVideo(), { visibilityState: 'visible' });
+  assert.strictEqual(controller.nextPollDelay(), 500);
+});
+
+test('returning to a visible tab schedules an immediate state check', async () => {
+  const delays = [];
+  let visibilityHandler = null;
+  const harness = createHarness([], new FakeVideo(), {
+    visibilityState: 'hidden',
+    addEventListener(type, handler) { if (type === 'visibilitychange') visibilityHandler = handler; },
+    setTimeout(_callback, delay) { delays.push(delay); return delays.length; },
+    clearTimeout() {}
+  });
+  harness.controller.start();
+  harness.document.visibilityState = 'visible';
+  visibilityHandler();
+  assert.strictEqual(delays.at(-1), 0);
 });
 
 test('inactive sessionId mismatch discards ownership and later polls never resume', async () => {
