@@ -1,6 +1,6 @@
 # 状態・復旧仕様
 
-AutoHotkey v2はTypeless / Wispr Flowのホットキーをトグルとして`source=ahk`へ通知し、対応版Local Voice Bridgeは自身が確定した録音開始・終了を`source=local-voice-bridge`へ直接通知します。ローカルHTTP Bridgeは入力元ごとの状態を保持してOR集約します。Background Workerは`GET_STATE`ごとに`http://127.0.0.1:17654/state`を取得し、Content Scriptは500ms間隔で集約状態を反映します。
+AutoHotkey v2はTypeless / Wispr Flowのホットキーをトグルとして`source=ahk`へ通知し、対応版Local Voice Bridgeは自身が確定した録音開始・終了を`source=local-voice-bridge`へ直接通知します。ローカルHTTP Bridgeは入力元ごとの状態を保持してOR集約します。Background Workerは`GET_STATE`ごとに`http://127.0.0.1:17654/state`を取得します。Content Scriptは表示中のYouTubeでは500ms周期を維持し、非表示タブではinactive時5秒・active時1秒へバックオフします。非表示から表示へ戻った時は待たずに状態を再取得します。
 
 ## 判定ラベル
 

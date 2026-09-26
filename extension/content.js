@@ -5,12 +5,14 @@ function createPauseController(deps) {
   const browserDocument = deps.document;
   const runtime = deps.chrome.runtime;
   const logger = deps.console || console;
-  const setTimer = deps.setInterval || setInterval;
-  const clearTimer = deps.clearInterval || clearInterval;
+  const setTimer = deps.setTimeout || setTimeout;
+  const clearTimer = deps.clearTimeout || clearTimeout;
   const setRequestTimer = deps.setTimeout || setTimeout;
   const clearRequestTimer = deps.clearTimeout || clearTimeout;
   const requestTimeoutMs = deps.requestTimeoutMs || 1000;
   const pollingIntervalMs = deps.pollingIntervalMs || 500;
+  const hiddenPollingIntervalMs = deps.hiddenPollingIntervalMs || 5000;
+  const hiddenActivePollingIntervalMs = deps.hiddenActivePollingIntervalMs || 1000;
 
   let lastStateActive = false;
   let pausedSessionId = null;
@@ -20,6 +22,7 @@ function createPauseController(deps) {
   let isRequesting = false;
   let activeSessionId = null;
   let resumeInFlight = false;
+  let pollTimer = null;
 
   function isPlaying(video) {
     return !!video && !video.paused && !video.ended && video.readyState >= 2;
@@ -190,15 +193,36 @@ function createPauseController(deps) {
     }
   }
 
+  function nextPollDelay() {
+    if (browserDocument.visibilityState !== 'hidden') return pollingIntervalMs;
+    return lastStateActive ? hiddenActivePollingIntervalMs : hiddenPollingIntervalMs;
+  }
+
+  function schedulePoll(delayMs = nextPollDelay()) {
+    if (pollTimer !== null) clearTimer(pollTimer);
+    pollTimer = setTimer(async () => {
+      pollTimer = null;
+      await pollState();
+      schedulePoll();
+    }, delayMs);
+    browserWindow.__youtubeDictationTimerId = pollTimer;
+  }
+
+  function onVisibilityChange() {
+    schedulePoll(browserDocument.visibilityState === 'hidden' ? nextPollDelay() : 0);
+  }
+
   function start() {
-    if (browserWindow.__youtubeDictationIntervalId) clearTimer(browserWindow.__youtubeDictationIntervalId);
-    browserWindow.__youtubeDictationIntervalId = setTimer(pollState, pollingIntervalMs);
+    if (browserWindow.__youtubeDictationTimerId) clearTimer(browserWindow.__youtubeDictationTimerId);
+    browserDocument.addEventListener?.('visibilitychange', onVisibilityChange);
+    schedulePoll(pollingIntervalMs);
   }
 
   return {
     pollState,
     start,
     updateVideoAttachment,
+    nextPollDelay,
     getState: () => ({ lastStateActive, pausedSessionId, isPausedByMe, blockCounter, targetVideo, activeSessionId, resumeInFlight, isRequesting })
   };
 }
