@@ -9,14 +9,15 @@ on:
       - closed
 
 permissions:
-  contents: write
-
+  contents: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   delete-bootstrap-branches:
+    permissions:
+      contents: write
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -48,6 +49,8 @@ jobs:
           done
 
   delete-merged-pr-branch:
+    permissions:
+      contents: write
     if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
