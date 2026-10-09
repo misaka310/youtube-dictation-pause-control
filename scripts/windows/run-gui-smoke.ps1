@@ -73,12 +73,8 @@ if (-not (Test-Path $python)) {
 if (-not $SkipDependencyInstall) {
     Invoke-NativeChecked `
         -FilePath $python `
-        -ArgumentList @('-m', 'pip', 'install', '--disable-pip-version-check', '--upgrade', 'pip') `
-        -FailureMessage 'Failed to update pip.'
-    Invoke-NativeChecked `
-        -FilePath $python `
-        -ArgumentList @('-m', 'pip', 'install', '--disable-pip-version-check', '-r', $requirements) `
-        -FailureMessage 'Failed to install GUI smoke dependencies.'
+        -ArgumentList @('-m', 'pip', 'install', '--disable-pip-version-check', '--require-hashes', '-r', $requirements) `
+        -FailureMessage 'Failed to install hash-locked GUI smoke dependencies.'
 }
 
 $testExitCode = 1
