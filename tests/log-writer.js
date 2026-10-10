@@ -1,4 +1,5 @@
 const assert = require('assert');
+const fc = require('fast-check');
 const { appendLineWithRetry, formatLocalTimestamp } = require('../server/log-writer');
 
 let caseCount = 0;
@@ -116,6 +117,41 @@ test('formats local timestamps with an explicit negative UTC offset', () => {
     getTimezoneOffset: () => 300
   };
   assert.strictEqual(formatLocalTimestamp(fakeDate), '2026-01-02 03:04:05 -05:00');
+});
+
+test('property: transient retry count and backoff stay bounded by configuration', () => {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 1, max: 20 }),
+      fc.integer({ min: 0, max: 1000 }),
+      (maxAttempts, retryDelayMs) => {
+        let attempts = 0;
+        const delays = [];
+        const error = new Error('resource busy');
+        error.code = 'EBUSY';
+
+        const result = appendLineWithRetry('control.log', 'line\n', {
+          maxAttempts,
+          retryDelayMs,
+          sleep(delayMs) {
+            delays.push(delayMs);
+          },
+          appendFileSync() {
+            attempts += 1;
+            throw error;
+          }
+        });
+
+        assert.strictEqual(attempts, maxAttempts);
+        assert.strictEqual(result.attempts, maxAttempts);
+        assert.strictEqual(result.ok, false);
+        assert.deepStrictEqual(
+          delays,
+          Array.from({ length: Math.max(0, maxAttempts - 1) }, (_, index) => retryDelayMs * (index + 1))
+        );
+      }
+    )
+  );
 });
 
 console.log(`Log writer tests passed: ${caseCount} cases`);
