@@ -12,6 +12,7 @@ const steps = [
   [node, ['tests/extension-content.js']],
   [node, ['tests/extension-background.js']],
   [node, ['tests/log-writer.js']],
+  [node, ['tests/fuzz-properties.js']],
   [node, ['tests/ahk-contract.js']],
   [node, ['tests/release-contract.js']],
 ];
