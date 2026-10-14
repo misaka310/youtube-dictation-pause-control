@@ -1,0 +1,235 @@
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+
+const root = path.resolve(__dirname, '..');
+const ahk = fs.readFileSync(path.join(root, 'ahk', 'youtube-dictation-control.ahk'), 'utf8');
+const settings = JSON.parse(fs.readFileSync(path.join(root, 'config', 'settings.example.json'), 'utf8'));
+const stopScript = fs.readFileSync(path.join(root, 'scripts', 'windows', 'stop-tracked-processes.ps1'), 'utf8');
+const startScript = fs.readFileSync(path.join(root, 'start.bat'), 'utf8');
+const backgroundStartScript = fs.readFileSync(path.join(root, 'scripts', 'windows', 'start-background.bat'), 'utf8');
+const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+
+let caseCount = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    caseCount += 1;
+  } catch (error) {
+    error.message = `${name}: ${error.message}`;
+    throw error;
+  }
+}
+
+test('default settings expose a dedicated reset hotkey', () => {
+  assert.strictEqual(settings.resetHotkey, 'Ctrl+Alt+R');
+});
+
+test('default settings use Ctrl + [ for Typeless', () => {
+  assert.strictEqual(settings.typelessHotkey, 'Ctrl+[');
+  assert.match(ahk, /global\s+TYPELESS_HOTKEY_RAW\s*:=\s*"Ctrl\+\["/);
+  assert.match(ahk, /IsModifierOnlyHotkey\(keyStr\)/);
+  assert.match(ahk, /IsModifierOnlyHotkey\(configuredHotkey\)/);
+  assert.match(ahk, /TYPELESS_HOTKEY_RAW\s*:=\s*"Ctrl\+\["/);
+});
+
+test('AHK reads resetHotkey from settings.json', () => {
+  assert.match(ahk, /global\s+RESET_HOTKEY_RAW\s*:=\s*"Ctrl\+Alt\+R"/);
+  assert.match(ahk, /"resetHotkey"/);
+  assert.match(ahk, /RESET_HOTKEY_RAW\s*:=\s*match\[1\]/);
+});
+
+test('reset clears the AHK-managed app states, aggregate state, and debounce timestamps', () => {
+  const resetFunction = ahk.match(/ResetDictationState\([^)]*\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(resetFunction, 'ResetDictationState function must exist');
+  const body = resetFunction[1];
+
+  assert.match(body, /isTypelessActive\s*:=\s*false/);
+  assert.match(body, /isWisprFlowActive\s*:=\s*false/);
+  assert.doesNotMatch(body, /isVoiceBridgeActive|voiceBridgeChordWasDown/);
+  assert.match(body, /anyDictationActive\s*:=\s*false/);
+  assert.match(body, /lastTypelessTick\s*:=\s*0/);
+  assert.match(body, /lastWisprFlowTick\s*:=\s*0/);
+});
+
+test('reset clears every server-side input source without resetting the session', () => {
+  const resetFunction = ahk.match(/ResetDictationState\([^)]*\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(resetFunction, 'ResetDictationState function must exist');
+  assert.match(resetFunction[1], /ResetServerState\(\)/);
+  assert.match(ahk, /ResetServerState\(\)[\s\S]+\/state/);
+  assert.match(ahk, /\"source\":\s*\"\*\"/);
+  assert.doesNotMatch(ahk.match(/ResetServerState\(\)[\s\S]*?\n\}/)[0], /\/reset/);
+});
+
+test('AHK registers the configured reset hotkey', () => {
+  assert.match(ahk, /parsedResetKey\s*:=\s*ParseHotkey\(RESET_HOTKEY_RAW\)/);
+  assert.match(ahk, /Hotkey\(parsedResetKey,\s*ResetDictationState\)/);
+});
+
+test('Typeless uses the same ordinary-key registration pattern as Wispr Flow', () => {
+  assert.match(ahk, /parsedTypelessKey\s*:=\s*ParseHotkey\(TYPELESS_HOTKEY_RAW\)/);
+  assert.match(ahk, /passThroughTypelessKey\s*:=\s*"~"\s*\.\s*parsedTypelessKey/);
+  assert.match(ahk, /Hotkey\(passThroughTypelessKey,\s*HandleTypelessKey\)/);
+  assert.doesNotMatch(ahk, /~>\^RShift/);
+  assert.doesNotMatch(ahk, /TriggerTypeless/);
+});
+
+test('README rejects modifier-only dictation hotkeys', () => {
+  assert.match(readme, /通常キーを1つ含めてください/);
+  assert.match(readme, /修飾キーだけの組み合わせ/);
+  assert.match(readme, /Ctrl \+ Shift/);
+});
+
+test('AHK leaves Local Voice Bridge reporting to the voice-input process', () => {
+  assert.doesNotMatch(ahk, /PHYSICAL_HOTKEY_POLL_INTERVAL_MS/);
+  assert.doesNotMatch(ahk, /isVoiceBridgeActive|voiceBridgeChordWasDown/);
+  assert.doesNotMatch(ahk, /PollPhysicalHotkeys|GetAsyncKeyState|VK_OEM_102/);
+  assert.match(ahk, /currentActiveState\s*:=\s*isTypelessActive\s*\|\|\s*isWisprFlowActive/);
+});
+
+test('AHK log writes retry transient file locks', () => {
+  assert.match(ahk, /AppendLogWithRetry\(logFile,\s*logLine\)/);
+  assert.match(ahk, /Loop\s+\d+/);
+  assert.match(ahk, /FileAppend\(logLine,\s*logFile,\s*"UTF-8"\)/);
+  assert.match(ahk, /Sleep\(/);
+});
+
+test('AHK resolves one application root for interpreted and compiled modes', () => {
+  assert.match(ahk, /GetParentDirectory\(path\)/);
+  assert.match(ahk, /global\s+APP_ROOT\s*:=\s*A_IsCompiled\s*\?\s*A_ScriptDir\s*:\s*GetParentDirectory\(A_ScriptDir\)/);
+  assert.match(ahk, /global\s+SERVER_SCRIPT\s*:=\s*APP_ROOT\s*\.\s*"\\server\\server\.js"/);
+  assert.match(ahk, /global\s+LOG_FILE\s*:=\s*APP_ROOT\s*\.\s*"\\logs\\control\.log"/);
+});
+
+test('AHK owns a custom notification-area menu', () => {
+  assert.match(ahk, /ConfigureTrayMenu\(\)/);
+  assert.match(ahk, /A_TrayMenu\.Delete\(\)/);
+  assert.match(ahk, /Status:/);
+  assert.match(ahk, /Restart local bridge/);
+  assert.match(ahk, /Reset dictation state/);
+  assert.match(ahk, /Open recent activity/);
+  assert.match(ahk, /Open full log/);
+  assert.match(ahk, /Start with Windows/);
+  assert.match(ahk, /A_TrayMenu\.Add\("Exit"/);
+});
+
+test('AHK builds a newest-first activity view without health-check noise', () => {
+  assert.match(ahk, /BuildRecentActivityLog\(\)/);
+  assert.match(ahk, /lines\.Length\s*-\s*A_Index\s*\+\s*1/);
+  assert.match(ahk, /\[SERVER\] GET \/health/);
+  assert.match(ahk, /IsImportantActivityLine\(line\)/);
+  assert.match(ahk, /Latest important activity first/);
+});
+
+test('duplicate launch keeps the existing tray process', () => {
+  assert.match(ahk, /#SingleInstance\s+Ignore/);
+  assert.doesNotMatch(ahk, /#SingleInstance\s+Force/);
+});
+
+test('AHK applies a dedicated YouTube Dictation notification-area icon', () => {
+  assert.match(ahk, /global\s+APP_ICON\s*:=\s*APP_ROOT\s*\.\s*"\\assets\\youtube-dictation\.ico"/);
+  assert.match(ahk, /ApplyAppIcon\(\)/);
+  assert.match(ahk, /TraySetIcon\(/);
+  assert.match(ahk, /A_IconTip\s*:=\s*"YouTube Dictation Pause Control"/);
+});
+
+test('AHK launches Node directly and hidden instead of opening a terminal', () => {
+  const startFunction = ahk.match(/StartOwnedServer\([^)]*\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(startFunction, 'StartOwnedServer function must exist');
+  assert.match(startFunction[1], /ResolveNodeExecutable\(\)/);
+  assert.match(startFunction[1], /Run\([^\n]+SERVER_SCRIPT[^\n]+"Hide"[^\n]+&serverPid\)/);
+  assert.doesNotMatch(startFunction[1], /cmd\.exe|wt\.exe|start-server\.bat/i);
+});
+
+test('AHK prefers the bundled Node runtime before system installations', () => {
+  const resolver = ahk.match(/ResolveNodeExecutable\(\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(resolver, 'ResolveNodeExecutable function must exist');
+  const body = resolver[1];
+  assert.match(body, /APP_ROOT\s*\.\s*"\\vendor\\node\\node\.exe"/);
+  assert.match(body, /FileExist\(bundledNode\)/);
+  assert.match(body, /return bundledNode/);
+  assert.ok(
+    body.indexOf('vendor\\node\\node.exe') < body.indexOf('A_ProgramFiles'),
+    'bundled Node must be checked before system installations'
+  );
+});
+
+test('AHK accepts only Node.js 22 or later for system fallbacks', () => {
+  assert.match(ahk, /IsSupportedNodeExecutable\(nodeExe\)/);
+  assert.match(ahk, /RegExMatch\(versionText,\s*"\^v\(\\d\+\)\\\."/);
+  assert.match(ahk, /Integer\(match\[1\]\)\s*>=\s*22/);
+  assert.match(ahk, /FileExist\(candidate\)\s*&&\s*IsSupportedNodeExecutable\(candidate\)/);
+});
+
+test('AHK monitors bridge health with failure debounce and restart throttling', () => {
+  assert.match(ahk, /global\s+HEALTH_CHECK_INTERVAL_MS\s*:=\s*5000/);
+  assert.match(ahk, /global\s+HEALTH_FAILURE_THRESHOLD\s*:=\s*2/);
+  assert.match(ahk, /MonitorServerHealth\(\)/);
+  assert.match(ahk, /SetTimer\(MonitorServerHealth,\s*HEALTH_CHECK_INTERVAL_MS\)/);
+  assert.match(ahk, /consecutiveHealthFailures\s*>=\s*HEALTH_FAILURE_THRESHOLD/);
+  assert.match(ahk, /lastServerStartTick/);
+  assert.match(ahk, /if\s*\(ownedServerPid\)\s*\{\s*StopOwnedServer\(\)/);
+});
+
+test('AHK stops only a verified server process it owns', () => {
+  assert.match(ahk, /global\s+ownedServerPid\s*:=\s*0/);
+  assert.match(ahk, /IsOwnedServerProcess\(pid\)/);
+  const stopFunction = ahk.match(/StopOwnedServer\([^)]*\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(stopFunction, 'StopOwnedServer function must exist');
+  assert.match(stopFunction[1], /IsOwnedServerProcess\(ownedServerPid\)/);
+  assert.match(stopFunction[1], /ProcessClose\(ownedServerPid\)/);
+});
+
+test('AHK exit cleanup removes its PID and stops only its owned bridge', () => {
+  assert.match(ahk, /HandleAppExit\(exitReason,\s*exitCode\)/);
+  assert.match(ahk, /OnExit\(HandleAppExit\)/);
+  const exitFunction = ahk.match(/HandleAppExit\([^)]*\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(exitFunction, 'HandleAppExit function must exist');
+  assert.match(exitFunction[1], /DeletePidFile/);
+  assert.match(exitFunction[1], /StopOwnedServer/);
+});
+
+test('AHK startup shortcut targets the compiled executable', () => {
+  assert.match(ahk, /GetStartupShortcutPath\(\)/);
+  assert.match(ahk, /ToggleStartupRegistration\(/);
+  assert.match(ahk, /A_IsCompiled/);
+  assert.match(ahk, /CreateShortcut/);
+});
+
+test('process cleanup supports an AHK-only mode', () => {
+  assert.match(stopScript, /param\s*\(\s*\[switch\]\$AhkOnly\s*\)/i);
+  assert.match(stopScript, /if\s*\(-not\s+\$AhkOnly\)/i);
+});
+
+test('a stale server PID triggers verified-port fallback and failed stops propagate', () => {
+  const missingProcessBlock = stopScript.match(/if \(\$null -eq \$process\) \{([\s\S]*?)\n    \}/);
+  assert.ok(missingProcessBlock, 'missing-process PID block must exist');
+  assert.match(missingProcessBlock[1], /return \$false/);
+  assert.match(stopScript, /if \(-not \(Stop-VerifiedProcess -ProcessId \$ownerId/);
+  assert.match(stopScript, /throw "Failed to stop \$failedCount verified Node server process\(es\)\."/);
+});
+
+test('process cleanup finds orphaned source and compiled controller instances', () => {
+  assert.match(stopScript, /Get-CimInstance\s+Win32_Process/i);
+  assert.match(stopScript, /youtube-dictation-control\.ahk/i);
+  assert.match(stopScript, /YouTubeDictationControl\.exe/i);
+  assert.match(stopScript, /\$controllerScriptPath/);
+  assert.match(stopScript, /ExpectedCommandLineFragments\s+@\(\$controllerScriptPath\)/);
+  assert.match(stopScript, /ExpectedExecutablePaths\s+@\(\$controllerExePath\)/);
+  assert.match(stopScript, /function\s+Stop-VerifiedProcess/i);
+  assert.match(stopScript, /Get-Process\s+-Id\s+\$ProcessId/i);
+  assert.match(stopScript, /Stop-VerifiedProcess\s+-ProcessId\s+\$process\.ProcessId/i);
+});
+
+test('manual startup prefers the compiled controller and keeps source fallback', () => {
+  assert.match(startScript, /YouTubeDictationControl\.exe/i);
+  assert.match(startScript, /youtube-dictation-control\.ahk/i);
+});
+
+test('background startup prefers the compiled controller and keeps source fallback', () => {
+  assert.match(backgroundStartScript, /YouTubeDictationControl\.exe/i);
+  assert.match(backgroundStartScript, /youtube-dictation-control\.ahk/i);
+});
+
+console.log(`AHK contract tests passed: ${caseCount} cases`);

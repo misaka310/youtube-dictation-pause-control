@@ -1,0 +1,229 @@
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const { appendLineWithRetry, formatLocalTimestamp } = require('./log-writer');
+
+const SERVICE_NAME = 'youtube-dictation-pause';
+const VERSION = '1.3.3';
+const DEFAULT_PORT = 17654;
+const DEFAULT_SETTINGS_PATH = path.join(__dirname, '..', 'config', 'settings.json');
+const RUNTIME_DIR = path.join(__dirname, '..', 'runtime');
+const PID_FILE_PATH = path.join(RUNTIME_DIR, 'youtube-dictation-server.pid');
+
+let port = DEFAULT_PORT;
+
+try {
+  if (fs.existsSync(DEFAULT_SETTINGS_PATH)) {
+    const settingsRaw = fs.readFileSync(DEFAULT_SETTINGS_PATH, 'utf8');
+    const settings = JSON.parse(settingsRaw);
+    if (settings.port) {
+      port = Number.parseInt(settings.port, 10);
+    }
+  }
+} catch (err) {
+  console.error(`Error reading settings.json, falling back to default port ${DEFAULT_PORT}:`, err);
+  port = DEFAULT_PORT;
+}
+
+const envPort = Number.parseInt(process.env.YDP_PORT || '', 10);
+if (Number.isInteger(envPort) && envPort > 0 && envPort < 65536) {
+  port = envPort;
+}
+
+const LOG_FILE_PATH = process.env.YDP_LOG_FILE
+  ? path.resolve(process.env.YDP_LOG_FILE)
+  : path.join(__dirname, '..', 'logs', 'control.log');
+
+function logMessage(message) {
+  const timestamp = formatLocalTimestamp();
+  const logLine = `${timestamp} [SERVER] ${message}\n`;
+  console.log(`[SERVER] ${message}`);
+
+  try {
+    const logDir = path.dirname(LOG_FILE_PATH);
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const result = appendLineWithRetry(LOG_FILE_PATH, logLine);
+    if (!result.ok) {
+      const code = result.error?.code || 'UNKNOWN';
+      console.error(`[SERVER] Log write skipped after ${result.attempts} attempts (${code}): ${LOG_FILE_PATH}`);
+    }
+  } catch (err) {
+    const code = err?.code || 'UNKNOWN';
+    console.error(`[SERVER] Log setup failed (${code}): ${LOG_FILE_PATH}`);
+  }
+}
+
+function writePidFile() {
+  try {
+    if (!fs.existsSync(RUNTIME_DIR)) {
+      fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+    }
+    fs.writeFileSync(PID_FILE_PATH, `${process.pid}\n`, 'utf8');
+  } catch (err) {
+    console.error('Failed to write PID file:', err);
+  }
+}
+
+function removePidFile() {
+  try {
+    if (fs.existsSync(PID_FILE_PATH)) {
+      const rawPid = fs.readFileSync(PID_FILE_PATH, 'utf8').trim();
+      if (rawPid === String(process.pid)) {
+        fs.unlinkSync(PID_FILE_PATH);
+      }
+    }
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+function shutdown(signal) {
+  logMessage(`shutdown requested: ${signal}`);
+  server.close(() => {
+    removePidFile();
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    removePidFile();
+    process.exit(0);
+  }, 1500).unref();
+}
+
+function isAllowedBrowserOrigin(origin) {
+  return typeof origin === 'string'
+    && (origin.startsWith('chrome-extension://') || origin.startsWith('moz-extension://'));
+}
+
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+
+  if (!origin) {
+    return true;
+  }
+
+  if (!isAllowedBrowserOrigin(origin)) {
+    return false;
+  }
+
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  return true;
+}
+
+const activeSources = new Set();
+
+let state = {
+  active: false,
+  sessionId: 0,
+  updatedAt: new Date().toISOString(),
+  source: 'ahk',
+  activeSources: []
+};
+
+const server = http.createServer((req, res) => {
+  const allowedCors = setCorsHeaders(req, res);
+  if (!allowedCors) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Origin not allowed' }));
+    return;
+  }
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  const { method, url } = req;
+
+  if (method === 'GET' && url === '/health') {
+    // Successful health probes are intentionally omitted from the user-facing log.
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, service: SERVICE_NAME, version: VERSION }));
+    return;
+  }
+
+  if (method === 'GET' && url === '/state') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(state));
+    return;
+  }
+
+  if (method === 'POST' && url === '/state') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const nextActive = !!payload.active;
+        const source = String(payload.source || 'ahk').trim() || 'ahk';
+        const prevActive = state.active;
+
+        if (!nextActive && source === '*') {
+          activeSources.clear();
+        } else if (nextActive) {
+          activeSources.add(source);
+        } else {
+          activeSources.delete(source);
+        }
+
+        const nextAggregateActive = activeSources.size > 0;
+        logMessage(`POST /state source=${source} active=${nextActive} aggregate=${nextAggregateActive}`);
+
+        if (prevActive === false && nextAggregateActive === true) {
+          state.sessionId += 1;
+          logMessage('state changed inactive -> active');
+        } else if (prevActive === true && nextAggregateActive === false) {
+          logMessage('state changed active -> inactive');
+        }
+
+        state.active = nextAggregateActive;
+        state.source = source;
+        state.activeSources = Array.from(activeSources).sort();
+        state.updatedAt = new Date().toISOString();
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(state));
+      } catch (err) {
+        logMessage(`ERROR: Failed to parse POST /state payload: ${err.message}`);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      }
+    });
+    return;
+  }
+
+  if (method === 'POST' && url === '/reset') {
+    logMessage('POST /reset');
+    activeSources.clear();
+    state.active = false;
+    state.sessionId = 0;
+    state.updatedAt = new Date().toISOString();
+    state.source = 'api';
+    state.activeSources = [];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(state));
+    return;
+  }
+
+  logMessage(`ERROR: Route not found: ${method} ${url}`);
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Not Found' }));
+});
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('exit', removePidFile);
+
+server.listen(port, '127.0.0.1', () => {
+  writePidFile();
+  logMessage(`server started on http://127.0.0.1:${port}`);
+});
