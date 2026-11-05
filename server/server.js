@@ -12,12 +12,23 @@ const PID_FILE_PATH = path.join(RUNTIME_DIR, 'youtube-dictation-server.pid');
 
 let port = DEFAULT_PORT;
 
+function parsePort(value) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : null;
+}
+
 try {
   if (fs.existsSync(DEFAULT_SETTINGS_PATH)) {
     const settingsRaw = fs.readFileSync(DEFAULT_SETTINGS_PATH, 'utf8');
     const settings = JSON.parse(settingsRaw);
-    if (settings.port) {
-      port = Number.parseInt(settings.port, 10);
+    if (settings.port !== undefined && settings.port !== null && settings.port !== '') {
+      const settingsPort = parsePort(settings.port);
+      if (settingsPort === null) {
+        // An out-of-range or non-numeric port would make server.listen() throw.
+        console.error(`Invalid port in settings.json (${JSON.stringify(settings.port)}), using default port ${DEFAULT_PORT}`);
+      } else {
+        port = settingsPort;
+      }
     }
   }
 } catch (err) {
@@ -25,8 +36,8 @@ try {
   port = DEFAULT_PORT;
 }
 
-const envPort = Number.parseInt(process.env.YDP_PORT || '', 10);
-if (Number.isInteger(envPort) && envPort > 0 && envPort < 65536) {
+const envPort = parsePort(process.env.YDP_PORT);
+if (envPort !== null) {
   port = envPort;
 }
 
